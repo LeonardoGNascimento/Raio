@@ -903,36 +903,70 @@ export default function App() {
       <div className="app">
         <div className="empty">
           <span className="logo-big">
-            <Symbol size={72} />
-            <span className="wordmark" style={{ fontSize: 56 }}>raio</span>
+            <Symbol size={64} />
+            <div>
+              <span className="wordmark" style={{ fontSize: 46, display: "block" }}>raio</span>
+              <span className="sb-tag" style={{ marginLeft: 2 }}>contract client</span>
+            </div>
           </span>
           <h1>
             Um client HTTP que <span className="c-accent">confere o contrato</span> — não só dispara
             a request.
           </h1>
           <div className="sub">
-            Cada request é um arquivo <strong style={{ color: "var(--text)" }}>JSON</strong> em{" "}
+            Cada request vira um arquivo <strong style={{ color: "var(--text)" }}>JSON</strong> em{" "}
             <span className="mono" style={{ color: "var(--text)", fontSize: "13.5px" }}>
               {ws.path.replace(/^\/home\/[^/]+/, "~")}/
-            </span>
-            . Versiona no git, revisa em PR. Sem conta, sem sync, roda offline.
+            </span>{" "}
+            — versiona no git e o time herda rotas, contratos e vigias. Sem conta, sem sync, offline.
           </div>
-          <div className="cards">
-            <div className="card">
-              <div className="card-title c-info">≠ diff env</div>
-              <div className="card-text">A mesma request em staging e prod, campo a campo.</div>
-            </div>
-            <div className="card offset">
-              <div className="card-title" style={{ fontFamily: "var(--font-ui)" }}>snapshot</div>
-              <div className="card-text">Pega breaking change sem você escrever um teste.</div>
-            </div>
-            <div className="card">
-              <div className="card-title c-ok">✓ openapi</div>
-              <div className="card-text">Valida a resposta contra o schema, sozinho.</div>
-            </div>
+
+          <div className="empty-actions">
+            <button className="empty-action primary" onClick={() => setNewCollOpen(true)}>
+              <span className="ea-icon">＋</span>
+              <span>
+                <strong>Criar uma collection</strong>
+                <small>nome e bases por ambiente — pronta para a primeira request</small>
+              </span>
+            </button>
+            <button className="empty-action" onClick={() => setModal("import")}>
+              <span className="ea-icon c-info">⇥</span>
+              <span>
+                <strong>Importar do Postman ou OpenAPI</strong>
+                <small>collection v2.x ou spec 3.x — a spec já entra como contrato</small>
+              </span>
+            </button>
+            <button className="empty-action" onClick={seedDemo}>
+              <span className="ea-icon c-ok">▶</span>
+              <span>
+                <strong>Explorar com uma collection de exemplo</strong>
+                <small>3 rotas prontas contra uma API pública, com ambientes</small>
+              </span>
+            </button>
           </div>
-          <button className="cta" onClick={seedDemo}>Abrir uma collection de exemplo</button>
+
+          <div className="empty-feats mono">
+            <span><i className="c-ok">✓</i> contrato Zod / OpenAPI por rota</span>
+            <span><i className="c-warn">≠</i> snapshot e diff entre ambientes</span>
+            <span><i className="c-err">⚠</i> trace interno da sua API</span>
+            <span><i className="c-info">◉</i> vigia com notificação</span>
+            <span><i className="c-purple">$</i> CLI para o CI</span>
+          </div>
         </div>
+
+        {newCollOpen && (
+          <ConfigModal
+            target={{ collection: "", folder: null }}
+            currentName=""
+            currentBase=""
+            create
+            onClose={() => setNewCollOpen(false)}
+            onSave={(name, _base, baseUrls) => createCollectionFull(name, baseUrls)}
+          />
+        )}
+        {modal === "import" && (
+          <ImportModal onImport={importCollection} onClose={() => setModal(null)} />
+        )}
       </div>
     );
   }

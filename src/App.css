@@ -1734,3 +1734,45 @@ mark.find.cur {
   align-self: flex-start;
 }
 .app-error { padding: 48px; color: var(--err); }
+
+/* ações do empty state */
+.empty-actions { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
+.empty-action {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  padding: 15px 18px;
+  cursor: pointer;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+.empty-action:hover { border-color: rgba(var(--rgb-accent), 0.45); }
+.empty-action.primary { border-color: rgba(var(--rgb-accent), 0.55); }
+.empty-action .ea-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--input);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+.empty-action strong { display: block; font-size: 14.5px; font-weight: 600; }
+.empty-action small { display: block; color: var(--faint); font-size: 12px; margin-top: 2px; }
+.empty-feats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 11.5px;
+  color: var(--dim);
+  max-width: 640px;
+}
+.empty-feats i { font-style: normal; margin-right: 6px; }
