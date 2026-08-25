@@ -283,6 +283,24 @@ pub fn create_folder(collection: String, name: String) -> Result<(), String> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())
 }
 
+/// Exclui uma pasta (e subpastas/requests) da collection.
+#[tauri::command]
+pub fn delete_folder(collection: String, folder: String) -> Result<(), String> {
+    if folder.trim().is_empty() {
+        return Err("Pasta inválida".into());
+    }
+    let ws = workspace_dir()?;
+    let dir = container_dir(&ws, &collection, Some(&folder));
+    // nunca deixa apagar a própria collection por um path vazio/sanitizado
+    if dir == container_dir(&ws, &collection, None) {
+        return Err("Pasta inválida".into());
+    }
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn delete_collection(name: String) -> Result<(), String> {
     let ws = workspace_dir()?;

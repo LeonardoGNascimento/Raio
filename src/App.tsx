@@ -35,6 +35,7 @@ import { ThemeModal } from "./components/ThemeModal";
 import { ImportModal } from "./components/ImportModal";
 import { CookiesModal } from "./components/CookiesModal";
 import { CommandPalette } from "./components/CommandPalette";
+import { ConfirmModal } from "./components/ConfirmModal";
 import { runRoute } from "./lib/runner";
 import {
   isPermissionGranted,
@@ -632,6 +633,32 @@ export default function App() {
   const createFolder = (collection: string, parent: string | null = null) =>
     setNewFolderIn({ collection, parent });
   const [newCollOpen, setNewCollOpen] = useState(false);
+  const [deleteFolderAsk, setDeleteFolderAsk] = useState<{
+    collection: string;
+    folder: string;
+    count: number;
+  } | null>(null);
+
+  const confirmDeleteFolder = async () => {
+    if (!deleteFolderAsk) return;
+    const { collection, folder } = deleteFolderAsk;
+    try {
+      await api.deleteFolder(collection, folder);
+    } catch (e) {
+      alert(String(e));
+      setDeleteFolderAsk(null);
+      return;
+    }
+    if (
+      active &&
+      active.collection === collection &&
+      active.folder &&
+      (active.folder === folder || active.folder.startsWith(folder + "/"))
+    )
+      setActive(null);
+    setDeleteFolderAsk(null);
+    reload();
+  };
 
   const createCollectionFull = async (name: string, baseUrls: [string, string][]) => {
     try {
@@ -915,6 +942,9 @@ export default function App() {
           reload();
         }}
         onNewFolder={createFolder}
+        onDeleteFolder={(collection, folder, count) =>
+          setDeleteFolderAsk({ collection, folder, count })
+        }
         onNewRequest={createRequest}
         onDuplicateRequest={duplicateRequest}
         onMoveRequest={moveRequest}
@@ -1103,6 +1133,34 @@ export default function App() {
         <ImportModal onImport={importCollection} onClose={() => setModal(null)} />
       )}
       {modal === "cookies" && <CookiesModal onClose={() => setModal(null)} />}
+      {deleteFolderAsk && (
+        <ConfirmModal
+          title="Excluir pasta"
+          message={
+            <>
+              Excluir a pasta{" "}
+              <span className="mono" style={{ color: "var(--text)" }}>
+                {deleteFolderAsk.folder}
+              </span>{" "}
+              de <span className="mono">{deleteFolderAsk.collection}</span>?{" "}
+              {deleteFolderAsk.count > 0 ? (
+                <>
+                  Isso apaga{" "}
+                  <strong className="c-err">
+                    {deleteFolderAsk.count} {deleteFolderAsk.count === 1 ? "request" : "requests"}
+                  </strong>{" "}
+                  (incluindo subpastas, snapshots e histórico). Não dá para desfazer.
+                </>
+              ) : (
+                "A pasta está vazia."
+              )}
+            </>
+          }
+          confirmLabel="Excluir pasta"
+          onConfirm={confirmDeleteFolder}
+          onClose={() => setDeleteFolderAsk(null)}
+        />
+      )}
       {paletteOpen && (
         <CommandPalette
           collections={ws.collections}

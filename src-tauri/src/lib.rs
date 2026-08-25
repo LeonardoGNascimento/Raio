@@ -25,6 +25,7 @@ pub fn run() {
             workspace::get_workspace,
             workspace::create_collection,
             workspace::create_folder,
+            workspace::delete_folder,
             workspace::save_config,
             workspace::delete_collection,
             workspace::save_request,

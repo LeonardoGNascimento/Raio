@@ -12,6 +12,7 @@ interface Props {
   onNewCollection: () => void;
   onDeleteCollection: (name: string) => void;
   onNewFolder: (collection: string, parent: string | null) => void;
+  onDeleteFolder: (collection: string, folder: string, requestCount: number) => void;
   onNewRequest: (collection: string, folder: string | null) => void;
   onDeleteRequest: (collection: string, folder: string | null, request: RequestDef) => void;
   onDuplicateRequest: (collection: string, folder: string | null, request: RequestDef) => void;
@@ -274,6 +275,18 @@ export function Sidebar(props: Props) {
               </>
             )}
           </Dropdown>
+          <button
+            className="btn-icon danger"
+            title="excluir pasta"
+            onClick={() => {
+              const count = (function total(f: Folder): number {
+                return f.requests.length + f.folders.reduce((a, sub) => a + total(sub), 0);
+              })(fold);
+              props.onDeleteFolder(coll.name, fullPath, count);
+            }}
+          >
+            ×
+          </button>
         </span>
       </div>
       {fold.base_url && !foldCollapsed && (

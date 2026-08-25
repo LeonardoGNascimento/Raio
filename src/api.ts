@@ -41,6 +41,8 @@ export const api = {
   createCollection: (name: string) => invoke<void>("create_collection", { name }),
   createFolder: (collection: string, name: string) =>
     invoke<void>("create_folder", { collection, name }),
+  deleteFolder: (collection: string, folder: string) =>
+    invoke<void>("delete_folder", { collection, folder }),
   saveConfig: (
     collection: string,
     folder: string | null,

@@ -1443,6 +1443,17 @@ mark.find.cur {
   margin-bottom: 12px;
 }
 .err-box { color: var(--err); font-size: 12.5px; margin-top: 10px; }
+.btn-danger {
+  background: var(--err);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 17px;
+  color: var(--ground);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-danger:hover { filter: brightness(1.08); }
 .btn-danger-ghost {
   background: none;
   border: 1px solid rgba(var(--rgb-err), 0.4);
