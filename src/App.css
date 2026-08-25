@@ -260,6 +260,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   background: rgba(var(--rgb-accent), 0.12);
   box-shadow: inset 0 0 0 1px rgba(var(--rgb-accent), 0.5);
 }
+.req-row:hover { background: rgba(255, 255, 255, 0.035); }
 .req-row[draggable="true"] { cursor: grab; }
 .req-row[draggable="true"]:active { cursor: grabbing; }
 .coll-arrow {
@@ -310,8 +311,19 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.coll-actions { display: none; align-items: center; }
-.coll-row:hover .coll-actions, .fold-row:hover .coll-actions { display: flex; }
+.coll-actions {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.coll-row:hover .coll-actions,
+.fold-row:hover .coll-actions,
+.coll-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
 /* dentro das linhas da sidebar, ícones um pouco menores para a linha não pular no hover */
 .coll-actions .btn-icon, .req-row .btn-icon {
   min-width: 22px;
@@ -330,7 +342,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   margin-bottom: 1px;
   transition: background-color 0.18s ease;
 }
-.req-row:hover { background: rgba(255, 255, 255, 0.035); }
 .req-row.active {
   background: rgba(var(--rgb-accent), 0.08);
   box-shadow: inset 0 0 0 1px rgba(var(--rgb-accent), 0.12);
@@ -363,8 +374,16 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   font-family: var(--font-mono);
 }
 .req-row.active .req-path { color: var(--text); }
-.req-row .del { display: none; }
-.req-row:hover .del { display: block; }
+.req-row .del {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.req-row:hover .del,
+.req-row .del:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
 .rename-inp {
   flex: 1;
   min-width: 0;
