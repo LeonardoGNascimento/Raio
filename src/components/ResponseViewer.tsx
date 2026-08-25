@@ -626,9 +626,7 @@ export function ResponseViewer(props: Props) {
               </span>
               <button
                 className="btn-danger-ghost"
-                onClick={() => {
-                  if (confirm("Excluir snapshot?")) props.onDeleteSnapshot();
-                }}
+                onClick={() => props.onDeleteSnapshot()}
               >
                 excluir snapshot
               </button>

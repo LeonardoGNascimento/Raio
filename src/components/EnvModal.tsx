@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Environment } from "../types";
 import { envDotClass } from "../types";
 import { Modal } from "./Modal";
+import { ConfirmModal } from "./ConfirmModal";
 
 interface Props {
   collection: string;
@@ -13,6 +14,7 @@ interface Props {
 export function EnvModal({ collection, environments, onSave, onClose }: Props) {
   const [envs, setEnvs] = useState<Environment[]>(() => structuredClone(environments));
   const [selected, setSelected] = useState(0);
+  const [askDelete, setAskDelete] = useState(false);
   const cur = envs[selected];
 
   const setCur = (patch: Partial<Environment>) =>
@@ -58,12 +60,7 @@ export function EnvModal({ collection, environments, onSave, onClose }: Props) {
                 />
                 <button
                   className="btn-danger-ghost"
-                  onClick={() => {
-                    if (!confirm(`Excluir ambiente "${cur.name}"?`)) return;
-                    const next = envs.filter((_, i) => i !== selected);
-                    setEnvs(next);
-                    setSelected(Math.max(0, selected - 1));
-                  }}
+                  onClick={() => setAskDelete(true)}
                 >
                   excluir
                 </button>
@@ -101,6 +98,25 @@ export function EnvModal({ collection, environments, onSave, onClose }: Props) {
           Salvar ambientes
         </button>
       </div>
+      {askDelete && cur && (
+        <ConfirmModal
+          title="Excluir ambiente"
+          message={
+            <>
+              Excluir o ambiente <span className="mono" style={{ color: "var(--text)" }}>{cur.name}</span> e
+              suas variáveis? Vale ao salvar.
+            </>
+          }
+          confirmLabel="Excluir ambiente"
+          onConfirm={() => {
+            const next = envs.filter((_, i) => i !== selected);
+            setEnvs(next);
+            setSelected(Math.max(0, selected - 1));
+            setAskDelete(false);
+          }}
+          onClose={() => setAskDelete(false)}
+        />
+      )}
     </Modal>
   );
 }

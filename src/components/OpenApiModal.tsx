@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { parseSpec } from "../lib/openapi";
 import { Modal } from "./Modal";
+import { ConfirmModal } from "./ConfirmModal";
 
 interface Props {
   collection: string;
@@ -13,6 +14,7 @@ interface Props {
 export function OpenApiModal({ collection, hasSpec, onSave, onDelete, onClose }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [askDelete, setAskDelete] = useState(false);
 
   const doSave = () => {
     const result = parseSpec(text);
@@ -52,9 +54,7 @@ export function OpenApiModal({ collection, hasSpec, onSave, onDelete, onClose }:
         {hasSpec ? (
           <button
             className="btn-danger-ghost"
-            onClick={() => {
-              if (confirm("Remover spec desta collection?")) onDelete();
-            }}
+            onClick={() => setAskDelete(true)}
           >
             Remover spec
           </button>
@@ -68,6 +68,24 @@ export function OpenApiModal({ collection, hasSpec, onSave, onDelete, onClose }:
           </button>
         </div>
       </div>
+      {askDelete && (
+        <ConfirmModal
+          title="Remover spec"
+          message={
+            <>
+              Remover a spec OpenAPI de{" "}
+              <span className="mono" style={{ color: "var(--text)" }}>{collection}</span>? As
+              responses deixam de ser validadas contra ela.
+            </>
+          }
+          confirmLabel="Remover spec"
+          onConfirm={() => {
+            setAskDelete(false);
+            onDelete();
+          }}
+          onClose={() => setAskDelete(false)}
+        />
+      )}
     </Modal>
   );
 }

@@ -3,6 +3,7 @@ import { api } from "./api";
 import { buildSendSpec, resolveBase, withBase } from "./lib/spec";
 import {
   envDotClass,
+  flattenRequests,
   folderChain,
   newRequest,
   type Environment,
@@ -310,12 +311,14 @@ export default function App() {
   );
 
   const focusRequest = (collection: string, folder: string | null, request: RequestDef) => {
-    if (
-      active?.dirty &&
-      active.request.id !== request.id &&
-      !confirm(`"${active.request.name}" tem edições não salvas. Descartar e trocar de request?`)
-    )
+    if (active?.dirty && active.request.id !== request.id) {
+      setPendingFocus({ collection, folder, request });
       return;
+    }
+    doFocusRequest(collection, folder, request);
+  };
+
+  const doFocusRequest = (collection: string, folder: string | null, request: RequestDef) => {
     localStorage.setItem(
       "raio.lastReq",
       JSON.stringify({ collection, folder, id: request.id }),
@@ -638,6 +641,18 @@ export default function App() {
     folder: string;
     count: number;
   } | null>(null);
+  const [deleteReqAsk, setDeleteReqAsk] = useState<{
+    collection: string;
+    folder: string | null;
+    request: RequestDef;
+  } | null>(null);
+  const [deleteCollAsk, setDeleteCollAsk] = useState<string | null>(null);
+  const [snapshotAsk, setSnapshotAsk] = useState(false);
+  const [pendingFocus, setPendingFocus] = useState<{
+    collection: string;
+    folder: string | null;
+    request: RequestDef;
+  } | null>(null);
 
   const confirmDeleteFolder = async () => {
     if (!deleteFolderAsk) return;
@@ -936,11 +951,7 @@ export default function App() {
         activeRequestId={active?.request.id ?? null}
         onSelect={focusRequest}
         onNewCollection={() => setNewCollOpen(true)}
-        onDeleteCollection={async (name) => {
-          await api.deleteCollection(name);
-          if (active?.collection === name) setActive(null);
-          reload();
-        }}
+        onDeleteCollection={(name) => setDeleteCollAsk(name)}
         onNewFolder={createFolder}
         onDeleteFolder={(collection, folder, count) =>
           setDeleteFolderAsk({ collection, folder, count })
@@ -951,11 +962,9 @@ export default function App() {
         onRenameRequest={renameRequest}
         onRenameFolder={renameFolder}
         onRenameCollection={renameCollection}
-        onDeleteRequest={async (collection, folder, req) => {
-          await api.deleteRequest(collection, folder, req.name);
-          if (active?.request.id === req.id) setActive(null);
-          reload();
-        }}
+        onDeleteRequest={(collection, folder, req) =>
+          setDeleteReqAsk({ collection, folder, request: req })
+        }
         onConfig={(collection, folder) => setConfigTarget({ collection, folder })}
         onOpenDashboard={(collection) => {
           ensureSpec(collection);
@@ -1102,7 +1111,7 @@ export default function App() {
                 history={history}
                 onRestoreHistory={restoreHistory}
                 onSaveSnapshot={saveSnapshot}
-                onDeleteSnapshot={deleteSnapshot}
+                onDeleteSnapshot={() => setSnapshotAsk(true)}
               />
             )}
           </div>
@@ -1159,6 +1168,89 @@ export default function App() {
           confirmLabel="Excluir pasta"
           onConfirm={confirmDeleteFolder}
           onClose={() => setDeleteFolderAsk(null)}
+        />
+      )}
+      {deleteReqAsk && (
+        <ConfirmModal
+          title="Excluir request"
+          message={
+            <>
+              Excluir{" "}
+              <span className="mono" style={{ color: "var(--text)" }}>
+                {deleteReqAsk.request.method} {deleteReqAsk.request.name}
+              </span>
+              ? Snapshot e histórico da rota vão junto. Não dá para desfazer.
+            </>
+          }
+          confirmLabel="Excluir request"
+          onConfirm={async () => {
+            const { collection, folder, request } = deleteReqAsk;
+            setDeleteReqAsk(null);
+            await api.deleteRequest(collection, folder, request.name).catch((e) => alert(String(e)));
+            if (active?.request.id === request.id) setActive(null);
+            reload();
+          }}
+          onClose={() => setDeleteReqAsk(null)}
+        />
+      )}
+      {deleteCollAsk && (
+        <ConfirmModal
+          title="Excluir collection"
+          message={
+            <>
+              Excluir a collection{" "}
+              <span className="mono" style={{ color: "var(--text)" }}>{deleteCollAsk}</span> com{" "}
+              <strong className="c-err">
+                {(() => {
+                  const c = ws.collections.find((x) => x.name === deleteCollAsk);
+                  return c ? flattenRequests(c).length : 0;
+                })()}{" "}
+                requests
+              </strong>
+              , pastas, ambientes, spec, snapshots e histórico? Não dá para desfazer.
+            </>
+          }
+          confirmLabel="Excluir collection"
+          onConfirm={async () => {
+            const name = deleteCollAsk;
+            setDeleteCollAsk(null);
+            await api.deleteCollection(name).catch((e) => alert(String(e)));
+            if (active?.collection === name) setActive(null);
+            reload();
+          }}
+          onClose={() => setDeleteCollAsk(null)}
+        />
+      )}
+      {snapshotAsk && (
+        <ConfirmModal
+          title="Excluir snapshot"
+          message="Excluir o snapshot desta rota? As próximas execuções deixam de ser comparadas."
+          confirmLabel="Excluir snapshot"
+          onConfirm={() => {
+            setSnapshotAsk(false);
+            void deleteSnapshot();
+          }}
+          onClose={() => setSnapshotAsk(false)}
+        />
+      )}
+      {pendingFocus && (
+        <ConfirmModal
+          title="Edições não salvas"
+          message={
+            <>
+              <span className="mono" style={{ color: "var(--text)" }}>
+                {active?.request.name}
+              </span>{" "}
+              tem edições não salvas. Descartar e trocar de request?
+            </>
+          }
+          confirmLabel="Descartar e trocar"
+          onConfirm={() => {
+            const p = pendingFocus;
+            setPendingFocus(null);
+            doFocusRequest(p.collection, p.folder, p.request);
+          }}
+          onClose={() => setPendingFocus(null)}
         />
       )}
       {paletteOpen && (

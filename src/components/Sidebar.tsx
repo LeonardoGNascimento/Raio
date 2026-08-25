@@ -150,7 +150,7 @@ function ReqRow({
         title="excluir request"
         onClick={(e) => {
           e.stopPropagation();
-          if (confirm(`Excluir "${req.name}"?`)) onDelete();
+          onDelete();
         }}
       >
         ×
@@ -406,10 +406,7 @@ export function Sidebar(props: Props) {
                 <button
                   className="btn-icon danger"
                   title="excluir collection"
-                  onClick={() => {
-                    if (confirm(`Excluir collection "${coll.name}" e todas as requests?`))
-                      props.onDeleteCollection(coll.name);
-                  }}
+                  onClick={() => props.onDeleteCollection(coll.name)}
                 >
                   ×
                 </button>
