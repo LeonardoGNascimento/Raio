@@ -80,6 +80,48 @@ export default function App() {
   const [checks, setChecks] = useState<CheckResult[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // larguras redimensionáveis (sidebar e editor), persistidas
+  const [sbW, setSbW] = useState(() => Number(localStorage.getItem("raio.sbW")) || 284);
+  const [edW, setEdW] = useState(() => Number(localStorage.getItem("raio.edW")) || 0); // 0 = 46% default
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+  const startResize = (e: React.MouseEvent, kind: "sb" | "ed") => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const start =
+      kind === "sb"
+        ? sbW
+        : (document.querySelector(".editor")?.getBoundingClientRect().width ?? edW ?? 500);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    let last = start;
+    const move = (ev: MouseEvent) => {
+      const d = ev.clientX - startX;
+      last = kind === "sb" ? clamp(start + d, 200, 560) : clamp(start + d, 340, window.innerWidth - sbW - 380);
+      if (kind === "sb") setSbW(last);
+      else setEdW(last);
+    };
+    const up = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(kind === "sb" ? "raio.sbW" : "raio.edW", String(last));
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  const resetResize = (kind: "sb" | "ed") => {
+    if (kind === "sb") {
+      setSbW(284);
+      localStorage.setItem("raio.sbW", "284");
+    } else {
+      setEdW(0);
+      localStorage.removeItem("raio.edW");
+    }
+  };
+
   // vigia por rota: cada request com watch configurado roda no próprio intervalo/ambiente
   const [watchCount, setWatchCount] = useState(0);
   const [watchStatus, setWatchStatus] = useState<string>("");
@@ -857,7 +899,10 @@ export default function App() {
   const hasSpec = activeColl?.has_spec ?? false;
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={{ "--sb-w": sbW + "px", "--ed-w": edW ? edW + "px" : "46%" } as React.CSSProperties}
+    >
       <Sidebar
         collections={ws.collections}
         workspacePath={ws.path}
@@ -887,6 +932,12 @@ export default function App() {
           setDashboard(collection);
         }}
         errorIds={new Set(Object.keys(errDots).filter((id) => errDots[id]))}
+      />
+      <div
+        className="pane-resizer"
+        title="arraste para redimensionar · duplo clique reseta"
+        onMouseDown={(e) => startResize(e, "sb")}
+        onDoubleClick={() => resetResize("sb")}
       />
 
       <main className="main">
@@ -989,6 +1040,12 @@ export default function App() {
               onExport={() => setModal("export")}
               hasSpec={hasSpec}
               envNames={envsOf(active.collection).map((e) => e.name)}
+            />
+            <div
+              className="pane-resizer"
+              title="arraste para redimensionar · duplo clique reseta"
+              onMouseDown={(e) => startResize(e, "ed")}
+              onDoubleClick={() => resetResize("ed")}
             />
             {diff ? (
               <DiffView

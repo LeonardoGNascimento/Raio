@@ -189,7 +189,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------- sidebar ---------- */
 .sidebar {
-  width: 284px;
+  width: var(--sb-w, 284px);
   flex-shrink: 0;
   background: rgba(var(--rgb-panel), 0.85);
   backdrop-filter: blur(8px);
@@ -392,6 +392,20 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   border-color: var(--accent);
 }
 
+/* divisor arrastável entre painéis */
+.pane-resizer {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  margin: 0 -2px;
+}
+.pane-resizer:hover,
+.pane-resizer:active {
+  background: rgba(var(--rgb-accent), 0.35);
+}
+
 /* ---------- main / topbar ---------- */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar {
@@ -438,9 +452,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---------- editor ---------- */
 .editor {
-  flex: 0 0 46%;
-  max-width: 640px;
-  min-width: 400px;
+  flex: 0 0 var(--ed-w, 46%);
+  max-width: none;
+  min-width: 340px;
   overflow-y: auto;
   padding: 22px 28px 26px;
   border-right: 1px solid var(--line);
