@@ -92,32 +92,35 @@ function readCfg(dir: string): DirCfg {
 }
 
 const collCfg = readCfg(collDir);
-const targets: { folder: string | null; folderCfg: DirCfg | null; req: RequestDef }[] = [
-  ...readRequests(collDir).map((req) => ({
-    folder: null as string | null,
-    folderCfg: null as DirCfg | null,
-    req,
-  })),
-  ...fs
-    .readdirSync(collDir)
-    .filter((f) => !f.startsWith(".") && fs.statSync(path.join(collDir, f)).isDirectory())
-    .flatMap((folder) => {
-      const cfg = readCfg(path.join(collDir, folder));
-      return readRequests(path.join(collDir, folder)).map((req) => ({
-        folder: folder as string | null,
-        folderCfg: cfg as DirCfg | null,
-        req,
-      }));
-    }),
-];
+interface Target {
+  folder: string | null;
+  cfgChain: DirCfg[]; // configs das pastas do caminho, na ordem
+  req: RequestDef;
+}
+const targets: Target[] = readRequests(collDir).map((req) => ({
+  folder: null,
+  cfgChain: [],
+  req,
+}));
+function walkDirs(dir: string, rel: string | null, chain: DirCfg[]) {
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (entry.startsWith(".") || !fs.statSync(full).isDirectory()) continue;
+    const relPath = rel ? rel + "/" + entry : entry;
+    const nextChain = [...chain, readCfg(full)];
+    for (const req of readRequests(full)) targets.push({ folder: relPath, cfgChain: nextChain, req });
+    walkDirs(full, relPath, nextChain);
+  }
+}
+walkDirs(collDir, null, []);
 if (targets.length === 0) fail("collection vazia");
 
 // ---- execução ----
 async function runOne(
   req: RequestDef,
-  folderCfg: DirCfg | null,
+  cfgChain: DirCfg[],
 ): Promise<{ ok: boolean; line: string; details: string[] }> {
-  const reqEnv = withBase(env, resolveBase(collCfg, folderCfg, envName));
+  const reqEnv = withBase(env, resolveBase(collCfg, cfgChain, envName));
   const sendSpec = buildSendSpec(req, reqEnv);
   const route = `${req.method.padEnd(6)} ${req.name}`;
   const details: string[] = [];
@@ -197,7 +200,7 @@ async function runOne(
   let failed = 0;
   for (const target of targets) {
     const req = target.req;
-    const result = await runOne(req, target.folderCfg);
+    const result = await runOne(req, target.cfgChain);
     console.log(result.line);
     for (const d of result.details) console.log(`  ${D}└${X} ${d}`);
     if (!result.ok) failed++;

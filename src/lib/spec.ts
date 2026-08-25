@@ -11,15 +11,16 @@ interface HasBase {
   base_urls?: [string, string][];
 }
 
-/** Base efetiva (collection + pasta) para um ambiente: por-ambiente vence o default. */
+/** Base efetiva (collection + cadeia de pastas) para um ambiente: por-ambiente vence o default. */
 export function resolveBase(
   coll: HasBase | null,
-  folder: HasBase | null,
+  folders: HasBase | HasBase[] | null,
   envName: string,
 ): string {
   const pick = (c: HasBase | null) =>
     c ? (c.base_urls?.find(([e]) => e === envName)?.[1] ?? c.base_url) : "";
-  return pick(coll) + pick(folder);
+  const chain = folders === null ? [] : Array.isArray(folders) ? folders : [folders];
+  return pick(coll) + chain.map(pick).join("");
 }
 
 /** Anexa a base resolvida como variável {{@base}} no ambiente. */

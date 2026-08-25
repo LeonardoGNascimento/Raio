@@ -7,7 +7,7 @@ import type { ContractState } from "../lib/openapi";
 import { contractForHistory, evaluateContract } from "../lib/contract";
 import { jsonDiff, tryParse } from "../lib/jsonDiff";
 import { formatMs } from "../lib/format";
-import { METHOD_CLASS, slaBreached, statusClass, type Collection, type Environment, type HistoryEntry, type RequestDef, type Snapshot } from "../types";
+import { METHOD_CLASS, flattenRequests, folderChain, slaBreached, statusClass, type Collection, type Environment, type HistoryEntry, type RequestDef, type Snapshot } from "../types";
 
 type SpecJson = Record<string, unknown>;
 type SnapState = "none" | "same" | "changed";
@@ -53,10 +53,7 @@ export function DashboardView({
   onOpenRequest,
   onClose,
 }: Props) {
-  const allRequests: { folder: string | null; req: RequestDef }[] = [
-    ...collection.requests.map((req) => ({ folder: null as string | null, req })),
-    ...collection.folders.flatMap((f) => f.requests.map((req) => ({ folder: f.name as string | null, req }))),
-  ];
+  const allRequests = flattenRequests(collection);
 
   const [rows, setRows] = useState<Row[]>(() =>
     allRequests.map(({ folder, req }) => ({
@@ -70,10 +67,8 @@ export function DashboardView({
   );
   const [runningAll, setRunningAll] = useState(false);
 
-  const envForRow = (folder: string | null): Environment | null => {
-    const foldObj = folder ? (collection.folders.find((f) => f.name === folder) ?? null) : null;
-    return withBase(env, resolveBase(collection, foldObj, envName));
-  };
+  const envForRow = (folder: string | null): Environment | null =>
+    withBase(env, resolveBase(collection, folderChain(collection, folder), envName));
   const cancelRef = useRef(false);
 
   const patchRow = (id: string, patch: Partial<Row>) =>

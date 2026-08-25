@@ -11,7 +11,7 @@ interface Props {
   onSelect: (collection: string, folder: string | null, request: RequestDef) => void;
   onNewCollection: () => void;
   onDeleteCollection: (name: string) => void;
-  onNewFolder: (collection: string) => void;
+  onNewFolder: (collection: string, parent: string | null) => void;
   onNewRequest: (collection: string, folder: string | null) => void;
   onDeleteRequest: (collection: string, folder: string | null, request: RequestDef) => void;
   onDuplicateRequest: (collection: string, folder: string | null, request: RequestDef) => void;
@@ -210,16 +210,21 @@ export function Sidebar(props: Props) {
     });
 
 
-  const renderFolder = (coll: Collection, fold: Folder) => {
-    const dp = dropProps(coll.name, fold.name);
-    const foldKey = coll.name + "/" + fold.name;
+  const renderFolder = (coll: Collection, fold: Folder, parentPath: string | null): React.ReactNode => {
+    const fullPath = parentPath ? parentPath + "/" + fold.name : fold.name;
+    const dp = dropProps(coll.name, fullPath);
+    const foldKey = coll.name + "/" + fullPath;
     const nameHit = !!term && fold.name.toLowerCase().includes(term);
-    const shown = term ? fold.requests.filter(reqMatch) : fold.requests;
-    if (term && shown.length === 0 && !nameHit) return null;
-    const list = shown.length > 0 ? shown : nameHit ? fold.requests : [];
+    const shownReqs = term && !nameHit ? fold.requests.filter(reqMatch) : fold.requests;
+    const subHasHit = (f: Folder): boolean =>
+      f.name.toLowerCase().includes(term) ||
+      f.requests.some(reqMatch) ||
+      f.folders.some(subHasHit);
+    const visibleSubs = term && !nameHit ? fold.folders.filter(subHasHit) : fold.folders;
+    if (term && !nameHit && shownReqs.length === 0 && visibleSubs.length === 0) return null;
     const foldCollapsed = isCollapsed(foldKey);
     return (
-    <div key={fold.name} style={{ marginTop: 2 }}>
+    <div key={fullPath} style={{ marginTop: 2 }}>
       <div
         className={"fold-row" + dp.className}
         onDragOver={dp.onDragOver}
@@ -234,37 +239,60 @@ export function Sidebar(props: Props) {
           suffix="/"
           className="coll-name"
           onClick={() => toggle(foldKey)}
-          onCommit={(n) => props.onRenameFolder(coll.name, fold.name, n)}
+          onCommit={(n) => props.onRenameFolder(coll.name, fullPath, n)}
         />
         <span className="coll-actions">
-          <button className="base-btn" title="base URL / config" onClick={() => props.onConfig(coll.name, fold.name)}>
+          <button className="base-btn" title="base URL / config" onClick={() => props.onConfig(coll.name, fullPath)}>
             base
           </button>
-          <button
-            className="btn-icon"
-            title="+ request"
-            onClick={() => props.onNewRequest(coll.name, fold.name)}
+          <Dropdown
+            align="right"
+            button={() => (
+              <button className="btn-icon" title="adicionar">+</button>
+            )}
           >
-            +
-          </button>
+            {(close) => (
+              <>
+                <button
+                  className="dd-item"
+                  onClick={() => {
+                    close();
+                    props.onNewRequest(coll.name, fullPath);
+                  }}
+                >
+                  <span className="c-accent">＋</span> nova request
+                </button>
+                <button
+                  className="dd-item"
+                  onClick={() => {
+                    close();
+                    props.onNewFolder(coll.name, fullPath);
+                  }}
+                >
+                  <span className="c-dim">▸</span> nova subpasta
+                </button>
+              </>
+            )}
+          </Dropdown>
         </span>
       </div>
       {fold.base_url && !foldCollapsed && (
         <div className="base-line" style={{ paddingLeft: 30 }}>{fold.base_url}</div>
       )}
       <div style={{ paddingLeft: 14, display: foldCollapsed ? "none" : undefined }}>
-        {list.map((req) => (
+        {visibleSubs.map((sub) => renderFolder(coll, sub, fullPath))}
+        {shownReqs.map((req) => (
           <ReqRow
             key={req.id}
             req={req}
             hasError={props.errorIds.has(req.id)}
             active={req.id === props.activeRequestId}
-            onClick={() => props.onSelect(coll.name, fold.name, req)}
-            onDelete={() => props.onDeleteRequest(coll.name, fold.name, req)}
-            onRename={(n) => props.onRenameRequest(coll.name, fold.name, req, n)}
-            onDuplicate={() => props.onDuplicateRequest(coll.name, fold.name, req)}
+            onClick={() => props.onSelect(coll.name, fullPath, req)}
+            onDelete={() => props.onDeleteRequest(coll.name, fullPath, req)}
+            onRename={(n) => props.onRenameRequest(coll.name, fullPath, req, n)}
+            onDuplicate={() => props.onDuplicateRequest(coll.name, fullPath, req)}
             collection={coll.name}
-            folder={fold.name}
+            folder={fullPath}
           />
         ))}
       </div>
@@ -300,10 +328,11 @@ export function Sidebar(props: Props) {
           const dp = dropProps(coll.name, null);
           const collNameHit = !!term && coll.name.toLowerCase().includes(term);
           const rootShown = term ? coll.requests.filter(reqMatch) : coll.requests;
-          const folderHasHit = coll.folders.some(
-            (f) =>
-              f.name.toLowerCase().includes(term) || f.requests.some(reqMatch),
-          );
+          const anyHit = (f: Folder): boolean =>
+            f.name.toLowerCase().includes(term) ||
+            f.requests.some(reqMatch) ||
+            f.folders.some(anyHit);
+          const folderHasHit = coll.folders.some(anyHit);
           if (term && rootShown.length === 0 && !collNameHit && !folderHasHit) return null;
           const rootList = rootShown.length > 0 ? rootShown : collNameHit ? coll.requests : [];
           return (
@@ -353,7 +382,7 @@ export function Sidebar(props: Props) {
                         className="dd-item"
                         onClick={() => {
                           close();
-                          props.onNewFolder(coll.name);
+                          props.onNewFolder(coll.name, null);
                         }}
                       >
                         <span className="c-dim">▸</span> nova pasta
@@ -376,7 +405,7 @@ export function Sidebar(props: Props) {
             {coll.base_url && <div className="base-line">{coll.base_url}</div>}
             {!isCollapsed(coll.name) && (
               <div style={{ paddingLeft: 8, marginTop: 1 }}>
-                {coll.folders.map((fold) => renderFolder(coll, fold))}
+                {coll.folders.map((fold) => renderFolder(coll, fold, null))}
                 {rootList.map((req) => (
                   <ReqRow
                     key={req.id}
@@ -402,7 +431,13 @@ export function Sidebar(props: Props) {
         const hit =
           coll.name.toLowerCase().includes(term) ||
           coll.requests.some(reqMatch) ||
-          coll.folders.some((f) => f.name.toLowerCase().includes(term) || f.requests.some(reqMatch));
+          coll.folders.some(function deep(f): boolean {
+            return (
+              f.name.toLowerCase().includes(term) ||
+              f.requests.some(reqMatch) ||
+              f.folders.some(deep)
+            );
+          });
         return !hit;
       }) && <p className="sb-empty">nada bate com "{filter.trim()}"</p>}
 

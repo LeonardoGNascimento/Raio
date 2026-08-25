@@ -3,6 +3,7 @@ import { api } from "./api";
 import { buildSendSpec, resolveBase, withBase } from "./lib/spec";
 import {
   envDotClass,
+  folderChain,
   newRequest,
   type Environment,
   type HistoryEntry,
@@ -248,8 +249,8 @@ export default function App() {
   ): Environment | null => {
     const e = overrideEnv === undefined ? env : overrideEnv;
     const coll = ws?.collections.find((c) => c.name === collection) ?? null;
-    const fold = folder && coll ? (coll.folders.find((f) => f.name === folder) ?? null) : null;
-    return withBase(e, resolveBase(coll, fold, e?.name ?? envName));
+    const chain = coll ? folderChain(coll, folder) : [];
+    return withBase(e, resolveBase(coll, chain, e?.name ?? envName));
   };
 
   const ensureSpec = useCallback(
@@ -423,7 +424,8 @@ export default function App() {
     request: RequestDef,
   ) => {
     const coll = ws?.collections.find((c) => c.name === collection);
-    const pool = (folder ? coll?.folders.find((f) => f.name === folder)?.requests : coll?.requests) ?? [];
+    const pool =
+      (folder && coll ? folderChain(coll, folder).slice(-1)[0]?.requests : coll?.requests) ?? [];
     const names = new Set(pool.map((r) => r.name));
     let name = `${request.name} copy`;
     for (let i = 2; names.has(name); i++) name = `${request.name} copy ${i}`;
@@ -558,20 +560,15 @@ export default function App() {
   /** existe alguma base (padrão ou por ambiente) configurada? */
   const hasAnyBase = (collection: string, folder: string | null): boolean => {
     const coll = ws?.collections.find((c) => c.name === collection);
-    const fold = folder ? coll?.folders.find((f) => f.name === folder) : null;
-    return !!(
-      coll?.base_url ||
-      (coll?.base_urls?.length ?? 0) > 0 ||
-      fold?.base_url ||
-      (fold?.base_urls?.length ?? 0) > 0
-    );
+    if (!coll) return false;
+    const nodes = [coll, ...folderChain(coll, folder)];
+    return nodes.some((n) => !!n.base_url || (n.base_urls?.length ?? 0) > 0);
   };
 
   /** base resolvida para o ambiente atual (preview) */
   const baseUrlOf = (collection: string, folder: string | null): string => {
     const coll = ws?.collections.find((c) => c.name === collection) ?? null;
-    const fold = folder && coll ? (coll.folders.find((f) => f.name === folder) ?? null) : null;
-    return resolveBase(coll, fold, envName);
+    return resolveBase(coll, coll ? folderChain(coll, folder) : [], envName);
   };
 
   const confirmNewRequest = async (name: string) => {
@@ -589,8 +586,9 @@ export default function App() {
     focusRequest(collection, folder, req);
   };
 
-  const [newFolderIn, setNewFolderIn] = useState<string | null>(null);
-  const createFolder = (collection: string) => setNewFolderIn(collection);
+  const [newFolderIn, setNewFolderIn] = useState<{ collection: string; parent: string | null } | null>(null);
+  const createFolder = (collection: string, parent: string | null = null) =>
+    setNewFolderIn({ collection, parent });
   const [newCollOpen, setNewCollOpen] = useState(false);
 
   const createCollectionFull = async (name: string, baseUrls: [string, string][]) => {
@@ -653,17 +651,21 @@ export default function App() {
   };
 
   const renameFolder = async (collection: string, folder: string, newName: string) => {
-    const fold = ws?.collections
-      .find((c) => c.name === collection)
-      ?.folders.find((f) => f.name === folder);
+    const coll = ws?.collections.find((c) => c.name === collection);
+    const leaf = coll ? folderChain(coll, folder).slice(-1)[0] : undefined;
     try {
-      await api.saveConfig(collection, folder, newName, fold?.base_url ?? "", fold?.base_urls ?? []);
+      await api.saveConfig(collection, folder, newName, leaf?.base_url ?? "", leaf?.base_urls ?? []);
     } catch (e) {
       alert(String(e));
       return;
     }
-    if (active && active.collection === collection && active.folder === folder)
-      setActive({ ...active, folder: newName });
+    const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/") + 1) : "";
+    const newPath = parent + newName;
+    if (active && active.collection === collection && active.folder) {
+      if (active.folder === folder) setActive({ ...active, folder: newPath });
+      else if (active.folder.startsWith(folder + "/"))
+        setActive({ ...active, folder: newPath + active.folder.slice(folder.length) });
+    }
     reload();
   };
 
@@ -802,8 +804,8 @@ export default function App() {
     if (!coll) return null;
     if (configTarget.folder === null)
       return { name: coll.name, base: coll.base_url, baseUrls: coll.base_urls };
-    const fold = coll.folders.find((f) => f.name === configTarget.folder);
-    return fold ? { name: fold.name, base: fold.base_url, baseUrls: fold.base_urls } : null;
+    const leaf = folderChain(coll, configTarget.folder).slice(-1)[0];
+    return leaf ? { name: leaf.name, base: leaf.base_url, baseUrls: leaf.base_urls } : null;
   }, [configTarget, ws]);
 
   // ---------- render ----------
@@ -1098,18 +1100,19 @@ export default function App() {
       )}
       {newFolderIn && (
         <ConfigModal
-          target={{ collection: newFolderIn, folder: "" }}
+          target={{ collection: newFolderIn.collection, folder: newFolderIn.parent ?? "" }}
           currentName="nova-pasta"
           currentBase=""
-          environments={envsOf(newFolderIn).map((e) => e.name)}
+          environments={envsOf(newFolderIn.collection).map((e) => e.name)}
           create
           onClose={() => setNewFolderIn(null)}
           onSave={async (name, baseUrl, baseUrls) => {
+            const path = newFolderIn.parent ? newFolderIn.parent + "/" + name : name;
             try {
-              await api.createFolder(newFolderIn, name);
+              await api.createFolder(newFolderIn.collection, path);
               if (baseUrl || baseUrls.length)
-                await api.saveConfig(newFolderIn, name, name, baseUrl, baseUrls);
-              await ensureEnvironments(newFolderIn, baseUrls.map(([e]) => e));
+                await api.saveConfig(newFolderIn.collection, path, name, baseUrl, baseUrls);
+              await ensureEnvironments(newFolderIn.collection, baseUrls.map(([e]) => e));
               setNewFolderIn(null);
               reload();
             } catch (e) {

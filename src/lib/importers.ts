@@ -1,4 +1,4 @@
-import type { Collection, MultipartField, RequestAuth, RequestDef } from "../types";
+import type { Collection, Folder, MultipartField, RequestAuth, RequestDef } from "../types";
 import { newRequest } from "../types";
 import { parseSpec } from "./openapi";
 
@@ -104,29 +104,32 @@ function importPostman(data: Json): ImportedCollection {
     requests: [],
     folders: [],
   };
-  const walk = (items: unknown, folder: ImportedFolder | null, prefix: string) => {
+  const folderByPath = new Map<string, ImportedFolder>();
+  const folderFor = (p: string): ImportedFolder => {
+    let f = folderByPath.get(p);
+    if (!f) {
+      f = { name: p, requests: [] };
+      folderByPath.set(p, f);
+      out.folders.push(f);
+    }
+    return f;
+  };
+  const walk = (items: unknown, prefix: string) => {
     if (!Array.isArray(items)) return;
     for (const raw of items) {
       if (!isObj(raw)) continue;
       if (Array.isArray(raw.item)) {
-        // pasta: um nível no raio; níveis mais fundos viram prefixo no nome
-        const label = (prefix ? prefix + " · " : "") + String(raw.name ?? "pasta");
-        if (folder) {
-          walk(raw.item, folder, label);
-        } else {
-          const f: ImportedFolder = { name: label, requests: [] };
-          out.folders.push(f);
-          walk(raw.item, f, "");
-        }
+        // pasta: níveis viram subpastas reais (path "a/b")
+        const seg = String(raw.name ?? "pasta").replace(/\//g, "-");
+        walk(raw.item, prefix ? prefix + "/" + seg : seg);
       } else {
         const req = pmRequest(raw);
         if (!req) continue;
-        if (prefix) req.name = prefix + " · " + req.name;
-        (folder ? folder.requests : out.requests).push(req);
+        (prefix ? folderFor(prefix).requests : out.requests).push(req);
       }
     }
   };
-  walk(data.item, null, "");
+  walk(data.item, "");
   out.folders = out.folders.filter((f) => f.requests.length > 0);
   return out;
 }
@@ -241,12 +244,16 @@ function pmExportRequest(req: RequestDef): Json {
 }
 
 export function exportPostman(coll: Collection): string {
+  const folderItem = (f: Folder): Json => ({
+    name: f.name,
+    item: [
+      ...f.requests.map((req) => ({ name: req.name, request: pmExportRequest(req) })),
+      ...f.folders.map(folderItem),
+    ],
+  });
   const item: Json[] = [
     ...coll.requests.map((req) => ({ name: req.name, request: pmExportRequest(req) })),
-    ...coll.folders.map((f) => ({
-      name: f.name,
-      item: f.requests.map((req) => ({ name: req.name, request: pmExportRequest(req) })),
-    })),
+    ...coll.folders.map(folderItem),
   ];
   return JSON.stringify(
     {

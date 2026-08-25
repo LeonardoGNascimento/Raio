@@ -70,6 +70,40 @@ export interface Folder {
   base_url: string;
   base_urls: [string, string][];
   requests: RequestDef[];
+  folders: Folder[];
+}
+
+/** Cadeia de pastas para um path "a/b/c" dentro da collection. */
+export function folderChain(coll: Collection, path: string | null | undefined): Folder[] {
+  if (!path) return [];
+  const chain: Folder[] = [];
+  let list = coll.folders;
+  for (const seg of path.split("/")) {
+    const f = list.find((x) => x.name === seg);
+    if (!f) break;
+    chain.push(f);
+    list = f.folders;
+  }
+  return chain;
+}
+
+/** Todas as requests da collection com o path da pasta. */
+export function flattenRequests(
+  coll: Collection,
+): { folder: string | null; req: RequestDef }[] {
+  const out: { folder: string | null; req: RequestDef }[] = coll.requests.map((req) => ({
+    folder: null,
+    req,
+  }));
+  const walk = (folders: Folder[], prefix: string) => {
+    for (const f of folders) {
+      const path = prefix ? prefix + "/" + f.name : f.name;
+      for (const req of f.requests) out.push({ folder: path, req });
+      walk(f.folders, path);
+    }
+  };
+  walk(coll.folders, "");
+  return out;
 }
 
 export interface Collection {

@@ -79,6 +79,29 @@ pub struct Folder {
     pub base_url: String,
     pub base_urls: Vec<(String, String)>,
     pub requests: Vec<RequestDef>,
+    pub folders: Vec<Folder>,
+}
+
+fn read_folder(path: &Path, name: String) -> Folder {
+    let cfg = read_config(path);
+    let mut folders = Vec::new();
+    if let Ok(subs) = fs::read_dir(path) {
+        for sub in subs.flatten() {
+            let spath = sub.path();
+            let sname = sub.file_name().to_string_lossy().to_string();
+            if spath.is_dir() && !sname.starts_with('.') {
+                folders.push(read_folder(&spath, sname));
+            }
+        }
+    }
+    folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Folder {
+        name,
+        base_url: cfg.base_url,
+        base_urls: cfg.base_urls,
+        requests: read_requests(path),
+        folders,
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -134,11 +157,13 @@ fn sanitize(name: &str) -> String {
     }
 }
 
-/// Diretório que contém as requests: collection ou collection/pasta.
+/// Diretório que contém as requests: collection ou collection/pasta (aninhada: "a/b/c").
 fn container_dir(ws: &Path, collection: &str, folder: Option<&str>) -> PathBuf {
     let mut dir = ws.join(sanitize(collection));
     if let Some(f) = folder {
-        dir = dir.join(sanitize(f));
+        for seg in f.split('/').filter(|s| !s.trim().is_empty()) {
+            dir = dir.join(sanitize(seg));
+        }
     }
     dir
 }
@@ -213,16 +238,9 @@ pub fn get_workspace() -> Result<WorkspaceData, String> {
             for sub in subs.flatten() {
                 let spath = sub.path();
                 let sname = sub.file_name().to_string_lossy().to_string();
-                if !spath.is_dir() || sname.starts_with('.') {
-                    continue;
+                if spath.is_dir() && !sname.starts_with('.') {
+                    folders.push(read_folder(&spath, sname));
                 }
-                let fcfg = read_config(&spath);
-                folders.push(Folder {
-                    name: sname,
-                    base_url: fcfg.base_url,
-                    base_urls: fcfg.base_urls,
-                    requests: read_requests(&spath),
-                });
             }
         }
         folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
