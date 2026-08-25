@@ -37,6 +37,7 @@ import { ImportModal } from "./components/ImportModal";
 import { CookiesModal } from "./components/CookiesModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConfirmModal } from "./components/ConfirmModal";
+import { UpdateButton } from "./components/UpdateButton";
 import { runRoute } from "./lib/runner";
 import {
   isPermissionGranted,
@@ -147,13 +148,11 @@ export default function App() {
     if (!data) return;
     let found: { coll: (typeof data.collections)[number]; folder: string | null; req: RequestDef } | null = null;
     for (const c of data.collections) {
-      const root = c.requests.find((r) => r.id === reqId);
-      if (root) { found = { coll: c, folder: null, req: root }; break; }
-      for (const f of c.folders) {
-        const r = f.requests.find((r) => r.id === reqId);
-        if (r) { found = { coll: c, folder: f.name, req: r }; break; }
+      const hit = flattenRequests(c).find((x) => x.req.id === reqId);
+      if (hit) {
+        found = { coll: c, folder: hit.folder, req: hit.req };
+        break;
       }
-      if (found) break;
     }
     if (!found?.req.watch) return;
     const { coll, folder, req } = found;
@@ -179,12 +178,9 @@ export default function App() {
     wsRef.current = ws;
     const wanted = new Map<string, number>(); // id -> minutos
     ws?.collections.forEach((c) => {
-      const scan = (reqs: RequestDef[]) =>
-        reqs.forEach((r) => {
-          if (r.watch && r.watch.minutes > 0) wanted.set(r.id, r.watch.minutes);
-        });
-      scan(c.requests);
-      c.folders.forEach((f) => scan(f.requests));
+      flattenRequests(c).forEach(({ req }) => {
+        if (req.watch && req.watch.minutes > 0) wanted.set(req.id, req.watch.minutes);
+      });
     });
     for (const t of watchTimers.current.values()) clearInterval(t);
     watchTimers.current.clear();
@@ -1033,6 +1029,7 @@ export default function App() {
             </button>
           )}
           <div className="spacer" />
+          <UpdateButton />
           {watchCount > 0 && (
             <span
               className="btn-ghost c-warn"

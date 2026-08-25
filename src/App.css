@@ -1776,3 +1776,6 @@ mark.find.cur {
   max-width: 640px;
 }
 .empty-feats i { font-style: normal; margin-right: 6px; }
+
+/* botão de update */
+.update-btn { font-weight: 600; }
