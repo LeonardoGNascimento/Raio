@@ -20,7 +20,15 @@ export function resolveBase(
   const pick = (c: HasBase | null) =>
     c ? (c.base_urls?.find(([e]) => e === envName)?.[1] ?? c.base_url) : "";
   const chain = folders === null ? [] : Array.isArray(folders) ? folders : [folders];
-  return pick(coll) + chain.map(pick).join("");
+  let base = "";
+  for (const part of [pick(coll), ...chain.map(pick)]) {
+    const p = (part ?? "").trim();
+    if (!p) continue;
+    // URL absoluta em pasta substitui a base herdada; path relativo anexa com "/"
+    if (!base || /^https?:\/\//i.test(p)) base = p;
+    else base = base.replace(/\/+$/, "") + "/" + p.replace(/^\/+/, "");
+  }
+  return base;
 }
 
 /** Anexa a base resolvida como variável {{@base}} no ambiente. */
