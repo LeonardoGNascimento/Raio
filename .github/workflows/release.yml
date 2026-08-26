@@ -46,31 +46,33 @@ jobs:
 
       - run: npm ci
 
-      - name: valida secret de assinatura
+      - name: valida e normaliza a chave de assinatura
         shell: bash
         env:
           KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$KEY" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY vazio — crie como Repository secret (Settings > Secrets and variables > Actions > aba Secrets)"
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY vazio — crie como Repository secret"
             exit 1
           fi
-          DEC=$(printf '%s' "$KEY" | base64 -d 2>/dev/null | head -c 120 || true)
-          HAY="$DEC$KEY"
-          if printf '%s' "$HAY" | grep -qi 'public key'; then
+          # remove quebras de linha/espacos que vieram no copiar-colar
+          CLEAN=$(printf '%s' "$KEY" | tr -d '\n\r\t ')
+          DEC=$(printf '%s' "$CLEAN" | python3 -c 'import base64,sys; print(base64.b64decode(sys.stdin.read()).decode(errors="replace")[:80])' 2>/dev/null || true)
+          if printf '%s' "$DEC" | grep -qi 'public key'; then
             echo "::error::o secret contém a chave PÚBLICA (raio.key.pub). Cole o conteúdo de ~/.tauri/raio.key"
             exit 1
           fi
-          if ! printf '%s' "$HAY" | grep -qi 'secret key'; then
-            echo "::error::secret não parece uma chave privada do tauri signer. Cole o conteúdo exato de ~/.tauri/raio.key"
+          if ! printf '%s' "$DEC" | grep -qi 'secret key'; then
+            echo "::error::secret não parece a chave privada do tauri signer. Cole o conteúdo exato de ~/.tauri/raio.key"
             exit 1
           fi
-          echo "::warning::secret ok · ${#KEY} chars · sha256 $(printf '%s' "$KEY" | sha256sum | cut -c1-16)"
+          echo "::add-mask::$CLEAN"
+          echo "TAURI_SIGNING_PRIVATE_KEY=$CLEAN" >> "$GITHUB_ENV"
+          echo "::warning::chave ok e normalizada (${#CLEAN} chars)"
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
         with:
