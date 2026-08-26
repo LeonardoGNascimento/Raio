@@ -927,8 +927,8 @@ mark.find.cur {
 .contract-alert .sub { color: var(--faint); font-weight: 400; }
 .contract-alert .cta { margin-left: auto; font-weight: 600; white-space: nowrap; }
 
-.tabs { display: flex; gap: 4px; padding: 14px 20px 0; }
-.tabs .fill { flex: 1; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 4px; padding: 14px 20px 0; flex-wrap: wrap; }
+.tabs .fill { flex: 1; border-bottom: 1px solid var(--line); min-width: 0; }
 .tab {
   background: transparent;
   border: 1px solid transparent;
@@ -958,7 +958,9 @@ mark.find.cur {
   align-items: flex-start;
   gap: 6px;
   padding: 0 2px 6px 0;
+  flex-wrap: wrap; /* pane estreito: botões quebram linha em vez de sumir */
 }
+.tab-actions .btn-ghost { white-space: nowrap; }
 .tab-actions .btn-ghost { padding: 4px 11px; font-size: 11px; }
 
 .tab-content { flex: 1; min-height: 0; overflow: auto; padding: 20px 28px 26px; }
