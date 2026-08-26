@@ -311,6 +311,19 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* path base da pasta, inline ao lado do nome */
+.fold-base {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--faint);
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+}
 .coll-actions {
   display: flex;
   align-items: center;

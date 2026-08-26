@@ -19,9 +19,11 @@ export function resolveBase(
 ): string {
   const pick = (c: HasBase | null) =>
     c ? (c.base_urls?.find(([e]) => e === envName)?.[1] ?? c.base_url) : "";
+  // pasta não tem ambientes: base única, anexada ao base da collection
+  const pickFolder = (c: HasBase) => c.base_url || c.base_urls?.[0]?.[1] || "";
   const chain = folders === null ? [] : Array.isArray(folders) ? folders : [folders];
   let base = "";
-  for (const part of [pick(coll), ...chain.map(pick)]) {
+  for (const part of [pick(coll), ...chain.map(pickFolder)]) {
     const p = (part ?? "").trim();
     if (!p) continue;
     // URL absoluta em pasta substitui a base herdada; path relativo anexa com "/"

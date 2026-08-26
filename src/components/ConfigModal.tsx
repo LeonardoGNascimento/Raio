@@ -30,15 +30,21 @@ export function ConfigModal({
   onClose,
 }: Props) {
   const [name, setName] = useState(currentName);
+  const isFolder = target.folder !== null;
+  // pasta: base única (path anexado ao base da collection), sem ambientes
+  const [folderBase, setFolderBase] = useState(
+    currentBase || currentBaseUrls?.[0]?.[1] || "",
+  );
   // migração: base antiga "qualquer ambiente" vira uma linha por ambiente existente
   const [baseUrls, setBaseUrls] = useState<[string, string][]>(() => {
+    if (isFolder) return [];
     const existing = currentBaseUrls ?? [];
     if (existing.length > 0 || !currentBase) return existing;
     return environments.length > 0
       ? environments.map((e) => [e, currentBase] as [string, string])
       : [["", currentBase]];
   });
-  const kind = target.folder !== null ? "pasta" : "collection";
+  const kind = isFolder ? "pasta" : "collection";
   const title = create
     ? target.folder !== null
       ? "Nova pasta"
@@ -51,16 +57,30 @@ export function ConfigModal({
     setBaseUrls(baseUrls.map((r, idx) => (idx === i ? ([env, url] as [string, string]) : r)));
 
   const save = () =>
-    onSave(name.trim() || currentName, "", baseUrls.filter(([e]) => e.trim()));
+    isFolder
+      ? onSave(name.trim() || currentName, folderBase.trim(), [])
+      : onSave(name.trim() || currentName, "", baseUrls.filter(([e]) => e.trim()));
 
   const suggestions = environments.filter((e) => !baseUrls.some(([used]) => used === e));
 
   return (
     <Modal title={title} width={520} onClose={onClose}>
       <div className="modal-hint">
-        Base URL desta {kind} por ambiente. Requests novas usam{" "}
-        <span className="mono c-accent">{"{{@base}}"}</span>, resolvido pelo ambiente ativo na hora
-        do envio. Ambiente que não existir é criado automaticamente ao salvar.
+        {isFolder ? (
+          <>
+            Path desta pasta, anexado ao base da collection: com{" "}
+            <span className="mono c-accent">/orders</span> as requests aqui dentro resolvem{" "}
+            <span className="mono c-accent">{"{{@base}}"}</span> como base da collection +{" "}
+            <span className="mono">/orders</span>. URL absoluta (https://…) substitui a base
+            herdada.
+          </>
+        ) : (
+          <>
+            Base URL desta collection por ambiente. Requests novas usam{" "}
+            <span className="mono c-accent">{"{{@base}}"}</span>, resolvido pelo ambiente ativo na
+            hora do envio. Ambiente que não existir é criado automaticamente ao salvar.
+          </>
+        )}
       </div>
       <div className="field-label">Nome</div>
       <input
@@ -72,8 +92,22 @@ export function ConfigModal({
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && save()}
       />
-      <div className="field-label">bases por ambiente</div>
-      {baseUrls.map(([envName, url], i) => (
+      {isFolder && (
+        <>
+          <div className="field-label">path base</div>
+          <input
+            className="inp"
+            style={{ width: "100%", marginBottom: 16, padding: "10px 12px", fontSize: 13 }}
+            placeholder="/orders"
+            value={folderBase}
+            onChange={(e) => setFolderBase(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            spellCheck={false}
+          />
+        </>
+      )}
+      {!isFolder && <div className="field-label">bases por ambiente</div>}
+      {!isFolder && baseUrls.map(([envName, url], i) => (
         <div key={i} className="hdr-row">
           <input
             className="inp key"
@@ -104,12 +138,14 @@ export function ConfigModal({
           <option key={e} value={e} />
         ))}
       </datalist>
-      <button
-        className="link-btn"
-        onClick={() => setBaseUrls([...baseUrls, [suggestions[0] ?? "", ""]])}
-      >
-        + adicionar base por ambiente
-      </button>
+      {!isFolder && (
+        <button
+          className="link-btn"
+          onClick={() => setBaseUrls([...baseUrls, [suggestions[0] ?? "", ""]])}
+        >
+          + adicionar base por ambiente
+        </button>
+      )}
 
       <div className="modal-foot">
         <button className="btn-ghost" onClick={onClose}>Cancelar</button>

@@ -242,6 +242,11 @@ export function Sidebar(props: Props) {
           onClick={() => toggle(foldKey)}
           onCommit={(n) => props.onRenameFolder(coll.name, fullPath, n)}
         />
+        {fold.base_url && (
+          <span className="fold-base" title={"base: " + fold.base_url}>
+            {fold.base_url}
+          </span>
+        )}
         <span className="coll-actions">
           <button className="base-btn" title="base URL / config" onClick={() => props.onConfig(coll.name, fullPath)}>
             base
@@ -289,9 +294,6 @@ export function Sidebar(props: Props) {
           </button>
         </span>
       </div>
-      {fold.base_url && !foldCollapsed && (
-        <div className="base-line" style={{ paddingLeft: 30 }}>{fold.base_url}</div>
-      )}
       <div style={{ paddingLeft: 14, display: foldCollapsed ? "none" : undefined }}>
         {visibleSubs.map((sub) => renderFolder(coll, sub, fullPath))}
         {shownReqs.map((req) => (
