@@ -34,8 +34,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
 [profile.release]
-opt-level = "s"   # otimiza para tamanho
-lto = true
-codegen-units = 1
+opt-level = "s"    # otimiza para tamanho
+lto = "thin"       # fat LTO relinkava tudo a cada release no CI; thin aproveita o cache
+codegen-units = 16 # paraleliza codegen; custo de tamanho ~pequeno, build bem mais rápido
 strip = true
 panic = "abort"
