@@ -29,12 +29,12 @@ interface VarHit {
   start: number;
 }
 
-/** {{var}} sob o índice de caractere, se houver (dinâmicas $ e @base ficam de fora). */
+/** {{var}} sob o índice de caractere, se houver (dinâmicas $ ficam de fora). */
 function varAt(text: string, idx: number): VarHit | null {
   for (const m of text.matchAll(VAR_RE)) {
     if (idx >= m.index && idx < m.index + m[0].length) {
       const name = m[1];
-      if (name.startsWith("$") || name.startsWith("@")) return null;
+      if (name.startsWith("$")) return null;
       return { name, start: m.index };
     }
   }
@@ -152,7 +152,10 @@ export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }
         >
           <div className="var-pop-name">
             {"{{" + pop.name + "}}"}
-            <span className="var-pop-env">{env?.name ? "ambiente " + env.name : "sem ambiente"}</span>
+            <span className="var-pop-env">
+              {(pop.name === "@base" ? "base da collection · " : "") +
+                (env?.name ? "ambiente " + env.name : "sem ambiente")}
+            </span>
           </div>
           <div className="var-pop-row">
             <input

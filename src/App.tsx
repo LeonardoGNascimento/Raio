@@ -716,6 +716,26 @@ export default function App() {
   const saveVar = async (name: string, value: string) => {
     if (!active) return;
     const collection = active.collection;
+    // @base é o base da collection: edita a linha do ambiente atual na config
+    if (name === "@base") {
+      const coll = ws?.collections.find((c) => c.name === collection);
+      if (!coll) return;
+      const target = envName || "default";
+      const rows = (coll.base_urls ?? []).some(([e]) => e === target)
+        ? (coll.base_urls ?? []).map(([e, u]) =>
+            e === target ? ([e, value] as [string, string]) : ([e, u] as [string, string]),
+          )
+        : ([...(coll.base_urls ?? []), [target, value]] as [string, string][]);
+      try {
+        await api.saveConfig(collection, null, collection, "", rows);
+        await ensureEnvironments(collection, [target]);
+        if (envName !== target) setEnvName(target);
+        await reload();
+      } catch (e) {
+        alert(String(e));
+      }
+      return;
+    }
     const envs = envsOf(collection);
     let target = envs.some((e) => e.name === envName) ? envName : (envs[0]?.name ?? "");
     let next: Environment[];
