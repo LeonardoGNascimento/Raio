@@ -712,6 +712,39 @@ export default function App() {
       .catch(() => {});
   };
 
+  /** edita/cria uma variável no ambiente atual da collection ativa (popover do hover) */
+  const saveVar = async (name: string, value: string) => {
+    if (!active) return;
+    const collection = active.collection;
+    const envs = envsOf(collection);
+    let target = envs.some((e) => e.name === envName) ? envName : (envs[0]?.name ?? "");
+    let next: Environment[];
+    if (!target) {
+      target = "default";
+      next = [{ name: target, vars: [[name, value]] as [string, string][] }];
+    } else {
+      next = envs.map((e) =>
+        e.name !== target
+          ? e
+          : {
+              ...e,
+              vars: e.vars.some(([k]) => k === name)
+                ? e.vars.map(([k, v]) =>
+                    k === name ? ([k, value] as [string, string]) : ([k, v] as [string, string]),
+                  )
+                : ([...e.vars, [name, value]] as [string, string][]),
+            },
+      );
+    }
+    try {
+      await api.saveEnvironments(collection, next);
+      if (envName !== target) setEnvName(target);
+      await reload();
+    } catch (e) {
+      alert(String(e));
+    }
+  };
+
   // ---------- renomear ----------
   const renameRequest = async (
     collection: string,
@@ -1116,6 +1149,7 @@ export default function App() {
               onExport={() => setModal("export")}
               hasSpec={hasSpec}
               envNames={envsOf(active.collection).map((e) => e.name)}
+              onSaveVar={saveVar}
             />
             <div
               className="pane-resizer"

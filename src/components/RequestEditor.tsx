@@ -30,6 +30,8 @@ interface Props {
   hasSpec: boolean;
   /** nomes dos ambientes da collection (para a vigia por rota) */
   envNames: string[];
+  /** salva/edita uma variável no ambiente atual da collection (popover do hover) */
+  onSaveVar?: (name: string, value: string) => void;
 }
 
 const ZOD_PLACEHOLDER = `z.object({
@@ -244,7 +246,7 @@ export function RequestEditor(props: Props) {
             </>
           )}
         </Dropdown>
-        <VarInput
+        <VarInput onSaveVar={props.onSaveVar}
           className="url-input"
           placeholder="{{@base}}/rota ou https://api.exemplo.com/rota"
           title={"envia para: " + expandUrl(request, env)}
@@ -317,8 +319,8 @@ export function RequestEditor(props: Props) {
           </span>
           {query.map(([k, v], i) => (
             <div key={i} className="hdr-row">
-              <VarInput className="inp key" placeholder="param" value={k} env={env} onChange={(nk) => setQuery(i, nk, v)} />
-              <VarInput className="inp val" placeholder="valor" value={v} env={env} onChange={(nv) => setQuery(i, k, nv)} />
+              <VarInput onSaveVar={props.onSaveVar} className="inp key" placeholder="param" value={k} env={env} onChange={(nk) => setQuery(i, nk, v)} />
+              <VarInput onSaveVar={props.onSaveVar} className="inp val" placeholder="valor" value={v} env={env} onChange={(nv) => setQuery(i, k, nv)} />
               <button
                 className="btn-icon danger"
                 onClick={() => set({ query: query.filter((_, idx) => idx !== i) })}
@@ -348,7 +350,7 @@ export function RequestEditor(props: Props) {
                 <span className="inp key mono" style={{ display: "flex", alignItems: "center", color: "var(--accent)" }}>
                   {name}
                 </span>
-                <VarInput
+                <VarInput onSaveVar={props.onSaveVar}
                   className="inp val"
                   placeholder="valor"
                   value={pathValues.get(name) ?? ""}
@@ -381,7 +383,7 @@ export function RequestEditor(props: Props) {
           {auth.type === "bearer" && (
             <div className="hdr-row">
               <span className="inp key mono" style={{ display: "flex", alignItems: "center" }}>token</span>
-              <VarInput
+              <VarInput onSaveVar={props.onSaveVar}
                 className="inp val"
                 placeholder="{{token}} ou o token direto"
                 value={auth.token ?? ""}
@@ -394,7 +396,7 @@ export function RequestEditor(props: Props) {
             <>
               <div className="hdr-row">
                 <span className="inp key mono" style={{ display: "flex", alignItems: "center" }}>usuário</span>
-                <VarInput className="inp val" value={auth.username ?? ""} env={env} onChange={(username) => setAuth({ username })} />
+                <VarInput onSaveVar={props.onSaveVar} className="inp val" value={auth.username ?? ""} env={env} onChange={(username) => setAuth({ username })} />
               </div>
               <div className="hdr-row">
                 <span className="inp key mono" style={{ display: "flex", alignItems: "center" }}>senha</span>
@@ -406,11 +408,11 @@ export function RequestEditor(props: Props) {
             <>
               <div className="hdr-row">
                 <span className="inp key mono" style={{ display: "flex", alignItems: "center" }}>nome</span>
-                <VarInput className="inp val" placeholder="X-Api-Key" value={auth.key ?? ""} env={env} onChange={(key) => setAuth({ key })} />
+                <VarInput onSaveVar={props.onSaveVar} className="inp val" placeholder="X-Api-Key" value={auth.key ?? ""} env={env} onChange={(key) => setAuth({ key })} />
               </div>
               <div className="hdr-row">
                 <span className="inp key mono" style={{ display: "flex", alignItems: "center" }}>valor</span>
-                <VarInput className="inp val" placeholder="{{apikey}}" value={auth.value ?? ""} env={env} onChange={(value) => setAuth({ value })} />
+                <VarInput onSaveVar={props.onSaveVar} className="inp val" placeholder="{{apikey}}" value={auth.value ?? ""} env={env} onChange={(value) => setAuth({ value })} />
               </div>
               <div className="body-head" style={{ marginTop: 4 }}>
                 <span className="sect-label">enviar em</span>
@@ -445,8 +447,8 @@ export function RequestEditor(props: Props) {
         <div>
           {request.headers.map(([k, v], i) => (
             <div key={i} className="hdr-row">
-              <VarInput className="inp key" placeholder="nome" value={k} env={env} onChange={(nk) => setHeader(i, nk, v)} />
-              <VarInput className="inp val" placeholder="valor" value={v} env={env} onChange={(nv) => setHeader(i, k, nv)} />
+              <VarInput onSaveVar={props.onSaveVar} className="inp key" placeholder="nome" value={k} env={env} onChange={(nk) => setHeader(i, nk, v)} />
+              <VarInput onSaveVar={props.onSaveVar} className="inp val" placeholder="valor" value={v} env={env} onChange={(nv) => setHeader(i, k, nv)} />
               <button
                 className="btn-icon danger"
                 onClick={() => set({ headers: request.headers.filter((_, idx) => idx !== i) })}
@@ -491,8 +493,8 @@ export function RequestEditor(props: Props) {
           <div>
             {form.map(([k, v], i) => (
               <div key={i} className="hdr-row">
-                <VarInput className="inp key" placeholder="campo" value={k} env={env} onChange={(nk) => setForm(i, nk, v)} />
-                <VarInput className="inp val" placeholder="valor" value={v} env={env} onChange={(nv) => setForm(i, k, nv)} />
+                <VarInput onSaveVar={props.onSaveVar} className="inp key" placeholder="campo" value={k} env={env} onChange={(nk) => setForm(i, nk, v)} />
+                <VarInput onSaveVar={props.onSaveVar} className="inp val" placeholder="valor" value={v} env={env} onChange={(nv) => setForm(i, k, nv)} />
                 <button className="btn-icon danger" onClick={() => set({ form: form.filter((_, idx) => idx !== i) })}>×</button>
               </div>
             ))}
