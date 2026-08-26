@@ -3,7 +3,6 @@ import { buildSendSpec, resolveBase, withBase } from "./spec";
 import { contractForHistory, evaluateContract } from "./contract";
 import { runChecks } from "./checks";
 import {
-  folderChain,
   slaBreached,
   type Collection,
   type HistoryEntry,
@@ -27,7 +26,7 @@ export async function runRoute(
   envName: string,
 ): Promise<RouteRun> {
   const baseEnv = coll.environments.find((e) => e.name === envName) ?? null;
-  const env = withBase(baseEnv, resolveBase(coll, folderChain(coll, folder), envName));
+  const env = withBase(baseEnv, resolveBase(coll, envName));
   const problems: string[] = [];
 
   try {

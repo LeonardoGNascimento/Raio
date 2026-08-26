@@ -7,7 +7,7 @@ import type { ContractState } from "../lib/openapi";
 import { contractForHistory, evaluateContract } from "../lib/contract";
 import { jsonDiff, tryParse } from "../lib/jsonDiff";
 import { formatMs } from "../lib/format";
-import { METHOD_CLASS, flattenRequests, folderChain, slaBreached, statusClass, type Collection, type Environment, type HistoryEntry, type RequestDef, type Snapshot } from "../types";
+import { METHOD_CLASS, flattenRequests, slaBreached, statusClass, type Collection, type Environment, type HistoryEntry, type RequestDef, type Snapshot } from "../types";
 
 type SpecJson = Record<string, unknown>;
 type SnapState = "none" | "same" | "changed";
@@ -67,8 +67,8 @@ export function DashboardView({
   );
   const [runningAll, setRunningAll] = useState(false);
 
-  const envForRow = (folder: string | null): Environment | null =>
-    withBase(env, resolveBase(collection, folderChain(collection, folder), envName));
+  const envForRow = (_folder: string | null): Environment | null =>
+    withBase(env, resolveBase(collection, envName));
   const cancelRef = useRef(false);
 
   const patchRow = (id: string, patch: Partial<Row>) =>

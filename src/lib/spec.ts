@@ -11,34 +11,31 @@ interface HasBase {
   base_urls?: [string, string][];
 }
 
-/** Base efetiva (collection + cadeia de pastas) para um ambiente: por-ambiente vence o default. */
-export function resolveBase(
-  coll: HasBase | null,
-  folders: HasBase | HasBase[] | null,
-  envName: string,
-): string {
-  const pick = (c: HasBase | null) =>
-    c ? (c.base_urls?.find(([e]) => e === envName)?.[1] ?? c.base_url) : "";
-  // pasta não tem ambientes: base única, anexada ao base da collection
-  const pickFolder = (c: HasBase) => c.base_url || c.base_urls?.[0]?.[1] || "";
+/** {{@base}} é só o base da collection no ambiente: por-ambiente vence o default. */
+export function resolveBase(coll: HasBase | null, envName: string): string {
+  if (!coll) return "";
+  return (coll.base_urls?.find(([e]) => e === envName)?.[1] ?? coll.base_url ?? "").trim();
+}
+
+/** Path acumulado das pastas ("/orders/v2") — entra visível na URL da request, não no {{@base}}. */
+export function folderBasePath(folders: HasBase | HasBase[] | null): string {
   const chain = folders === null ? [] : Array.isArray(folders) ? folders : [folders];
-  let base = "";
-  for (const part of [pick(coll), ...chain.map(pickFolder)]) {
-    const p = (part ?? "").trim();
+  let path = "";
+  for (const f of chain) {
+    const p = (f.base_url || f.base_urls?.[0]?.[1] || "").trim();
     if (!p) continue;
-    // URL absoluta em pasta substitui a base herdada; path relativo anexa com "/"
-    if (!base || /^https?:\/\//i.test(p)) base = p;
-    else base = base.replace(/\/+$/, "") + "/" + p.replace(/^\/+/, "");
+    path += "/" + p.replace(/^\/+/, "").replace(/\/+$/, "");
   }
-  return base;
+  return path;
 }
 
 /** Anexa a base resolvida como variável {{@base}} no ambiente. */
 export function withBase(env: Environment | null, base: string): Environment | null {
   if (!base) return env;
+  // sem barra final: a URL da request já traz o "/" ({{@base}}/orders/teste)
   return {
     name: env?.name ?? "",
-    vars: [...(env?.vars ?? []), ["@base", base]] as [string, string][],
+    vars: [...(env?.vars ?? []), ["@base", base.replace(/\/+$/, "")]] as [string, string][],
   };
 }
 

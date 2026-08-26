@@ -120,7 +120,7 @@ async function runOne(
   req: RequestDef,
   cfgChain: DirCfg[],
 ): Promise<{ ok: boolean; line: string; details: string[] }> {
-  const reqEnv = withBase(env, resolveBase(collCfg, cfgChain, envName));
+  const reqEnv = withBase(env, resolveBase(collCfg, envName));
   const sendSpec = buildSendSpec(req, reqEnv);
   const route = `${req.method.padEnd(6)} ${req.name}`;
   const details: string[] = [];

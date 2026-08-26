@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { buildSendSpec, resolveBase, withBase } from "./lib/spec";
+import { buildSendSpec, folderBasePath, resolveBase, withBase } from "./lib/spec";
 import {
   envDotClass,
   flattenRequests,
@@ -281,16 +281,15 @@ export default function App() {
     };
   }, [baseEnv, sessionVars]);
 
-  /** ambiente + variável {{@base}} resolvida para a collection/pasta (por ambiente). */
+  /** ambiente + variável {{@base}} (base da collection no ambiente; path de pasta fica na URL). */
   const envFor = (
     collection: string,
-    folder: string | null,
+    _folder: string | null,
     overrideEnv?: Environment | null,
   ): Environment | null => {
     const e = overrideEnv === undefined ? env : overrideEnv;
     const coll = ws?.collections.find((c) => c.name === collection) ?? null;
-    const chain = coll ? folderChain(coll, folder) : [];
-    return withBase(e, resolveBase(coll, chain, e?.name ?? envName));
+    return withBase(e, resolveBase(coll, e?.name ?? envName));
   };
 
   const ensureSpec = useCallback(
@@ -610,13 +609,18 @@ export default function App() {
   /** base resolvida para o ambiente atual (preview) */
   const baseUrlOf = (collection: string, folder: string | null): string => {
     const coll = ws?.collections.find((c) => c.name === collection) ?? null;
-    return resolveBase(coll, coll ? folderChain(coll, folder) : [], envName);
+    return resolveBase(coll, envName) + (coll ? folderBasePath(folderChain(coll, folder)) : "");
   };
 
   const confirmNewRequest = async (name: string) => {
     if (!newReqIn) return;
     const { collection, folder } = newReqIn;
-    const req = newRequest(name, hasAnyBase(collection, folder) ? "{{@base}}" + name : "");
+    const coll = ws?.collections.find((c) => c.name === collection) ?? null;
+    const prefix = coll ? folderBasePath(folderChain(coll, folder)) : "";
+    const req = newRequest(
+      name,
+      hasAnyBase(collection, folder) ? "{{@base}}" + prefix + "/" + name.replace(/^\/+/, "") : "",
+    );
     try {
       await api.saveRequest(collection, folder, req);
     } catch (e) {
