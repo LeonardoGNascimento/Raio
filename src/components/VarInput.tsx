@@ -30,7 +30,7 @@ interface VarHit {
 }
 
 /** {{var}} sob o índice de caractere, se houver (dinâmicas $ ficam de fora). */
-function varAt(text: string, idx: number): VarHit | null {
+export function varAt(text: string, idx: number): VarHit | null {
   for (const m of text.matchAll(VAR_RE)) {
     if (idx >= m.index && idx < m.index + m[0].length) {
       const name = m[1];
@@ -43,16 +43,18 @@ function varAt(text: string, idx: number): VarHit | null {
 
 let measureCtx: CanvasRenderingContext2D | null = null;
 
-/** índice do caractere sob o x visual do input (fonte real, binary search). */
-function charIndexAt(el: HTMLInputElement, clientX: number): number {
+export function setMeasureFont(cs: CSSStyleDeclaration) {
   if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
-  if (!measureCtx) return -1;
-  const cs = getComputedStyle(el);
-  measureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-  const x =
-    clientX - el.getBoundingClientRect().left - parseFloat(cs.paddingLeft) + el.scrollLeft;
-  if (x < 0) return -1;
-  const text = el.value;
+  if (measureCtx) measureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+}
+
+export function measureText(s: string): number {
+  return measureCtx?.measureText(s).width ?? 0;
+}
+
+/** índice do caractere sob o x (px, já com scroll/padding descontados); fonte via setMeasureFont. */
+export function charIndexInText(text: string, x: number): number {
+  if (x < 0 || !measureCtx) return -1;
   let lo = 0;
   let hi = text.length;
   while (lo < hi) {
@@ -61,6 +63,62 @@ function charIndexAt(el: HTMLInputElement, clientX: number): number {
     else hi = mid - 1;
   }
   return lo >= text.length ? -1 : lo;
+}
+
+/** índice do caractere sob o x visual do input (fonte real, binary search). */
+function charIndexAt(el: HTMLInputElement, clientX: number): number {
+  const cs = getComputedStyle(el);
+  setMeasureFont(cs);
+  const x =
+    clientX - el.getBoundingClientRect().left - parseFloat(cs.paddingLeft) + el.scrollLeft;
+  return charIndexInText(el.value, x);
+}
+
+/** popover compartilhado de edição de variável (VarInput e CodeArea). */
+export function VarPop(props: {
+  name: string;
+  env: Environment | null;
+  style: React.CSSProperties;
+  onSave: (name: string, value: string) => void;
+  onClose: () => void;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
+  const [draft, setDraft] = useState(
+    props.env?.vars.find(([k]) => k === props.name)?.[1] ?? "",
+  );
+  const save = () => {
+    props.onSave(props.name, draft);
+    props.onClose();
+  };
+  return (
+    <div className="var-pop" style={props.style} onMouseEnter={props.onEnter} onMouseLeave={props.onLeave}>
+      <div className="var-pop-name">
+        {"{{" + props.name + "}}"}
+        <span className="var-pop-env">
+          {(props.name === "@base" ? "base da collection · " : "") +
+            (props.env?.name ? "ambiente " + props.env.name : "sem ambiente")}
+        </span>
+      </div>
+      <div className="var-pop-row">
+        <input
+          className="inp"
+          value={draft}
+          placeholder="valor da variável"
+          spellCheck={false}
+          autoFocus={false}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") props.onClose();
+          }}
+        />
+        <button className="btn-primary var-pop-save" onClick={save}>
+          salvar
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> {
@@ -76,7 +134,6 @@ export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }
   const underRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [pop, setPop] = useState<{ name: string; left: number } | null>(null);
-  const [draft, setDraft] = useState("");
 
   const sync = (el: HTMLInputElement) => {
     if (underRef.current) underRef.current.scrollLeft = el.scrollLeft;
@@ -104,20 +161,12 @@ export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }
     cancelClose();
     if (pop?.name === hit.name) return;
     const cs = getComputedStyle(el);
-    if (measureCtx) measureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    setMeasureFont(cs);
     const left = Math.max(
       0,
-      (measureCtx?.measureText(el.value.slice(0, hit.start)).width ?? 0) -
-        el.scrollLeft +
-        parseFloat(cs.paddingLeft),
+      measureText(el.value.slice(0, hit.start)) - el.scrollLeft + parseFloat(cs.paddingLeft),
     );
-    setDraft(env?.vars.find(([k]) => k === hit.name)?.[1] ?? "");
     setPop({ name: hit.name, left: Math.min(left, el.clientWidth - 40) });
-  };
-
-  const save = () => {
-    if (pop && onSaveVar) onSaveVar(pop.name, draft);
-    setPop(null);
   };
 
   return (
@@ -143,37 +192,17 @@ export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }
         onMouseMove={onMove}
         onMouseLeave={() => pop && scheduleClose()}
       />
-      {pop && (
-        <div
-          className="var-pop"
+      {pop && onSaveVar && (
+        <VarPop
+          key={pop.name}
+          name={pop.name}
+          env={env}
           style={{ left: pop.left }}
-          onMouseEnter={cancelClose}
-          onMouseLeave={scheduleClose}
-        >
-          <div className="var-pop-name">
-            {"{{" + pop.name + "}}"}
-            <span className="var-pop-env">
-              {(pop.name === "@base" ? "base da collection · " : "") +
-                (env?.name ? "ambiente " + env.name : "sem ambiente")}
-            </span>
-          </div>
-          <div className="var-pop-row">
-            <input
-              className="inp"
-              value={draft}
-              placeholder="valor da variável"
-              spellCheck={false}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") save();
-                if (e.key === "Escape") setPop(null);
-              }}
-            />
-            <button className="btn-primary var-pop-save" onClick={save}>
-              salvar
-            </button>
-          </div>
-        </div>
+          onSave={onSaveVar}
+          onClose={() => setPop(null)}
+          onEnter={cancelClose}
+          onLeave={scheduleClose}
+        />
       )}
     </div>
   );

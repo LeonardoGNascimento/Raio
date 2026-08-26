@@ -587,6 +587,8 @@ export function RequestEditor(props: Props) {
                 highlight={highlightJson}
                 onChange={(v) => set({ body: v })}
                 onKeyDown={(e) => handleCodeEditorKeys(e, (v) => set({ body: v }))}
+                env={env}
+                onSaveVar={props.onSaveVar}
               />
             ) : (
               <textarea
