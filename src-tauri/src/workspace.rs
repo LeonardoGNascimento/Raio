@@ -210,6 +210,9 @@ fn read_requests(dir: &Path) -> Vec<RequestDef> {
             }
         }
     }
+    // ids duplicados (arquivos órfãos) quebram as keys da listagem: mantém um por id
+    let mut seen = std::collections::HashSet::new();
+    requests.retain(|r| seen.insert(r.id.clone()));
     requests.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     requests
 }
@@ -387,6 +390,24 @@ pub fn save_request(
     }
 
     let path = request_path(&ws, &collection, folder.as_deref(), &request.name);
+    // arquivos órfãos com o mesmo id (nome de arquivo legado/diferente) viram duplicata
+    // na listagem: remove qualquer outro json do dir que carregue este id
+    if let Ok(files) = fs::read_dir(&dir) {
+        for file in files.flatten() {
+            let fpath = file.path();
+            let fname = file.file_name().to_string_lossy().to_string();
+            if fname.starts_with('.') || !fname.ends_with(".json") || fpath == path {
+                continue;
+            }
+            if let Ok(raw) = fs::read_to_string(&fpath) {
+                if let Ok(other) = serde_json::from_str::<RequestDef>(&raw) {
+                    if other.id == request.id {
+                        let _ = fs::remove_file(&fpath);
+                    }
+                }
+            }
+        }
+    }
     let raw = serde_json::to_string_pretty(&request).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())
 }
@@ -735,6 +756,41 @@ mod dup_tests {
             let ws = get_workspace().unwrap();
             let names: Vec<_> = ws.collections.iter().map(|c| c.name.clone()).collect();
             assert_eq!(names, vec!["Contas"], "listagem: {:?}", names);
+        });
+    }
+
+    #[test]
+    fn salvar_request_remove_arquivo_orfao_com_mesmo_id() {
+        with_temp_home(|| {
+            create_collection("Api".into()).unwrap();
+            let req = RequestDef {
+                id: "abc-1".into(),
+                name: "01 - stats (X)".into(),
+                method: "GET".into(),
+                url: "{{@base}}/x".into(),
+                headers: vec![],
+                body: String::new(),
+                body_type: "none".into(),
+                contract: None,
+                max_ms: None,
+                query: vec![],
+                path_params: vec![],
+                auth: None,
+                form: vec![],
+                multipart: vec![],
+                options: None,
+                checks: String::new(),
+                extract: vec![],
+                watch: None,
+            };
+            // arquivo legado com nome slugificado, mesmo id
+            let ws = workspace_dir().unwrap();
+            let legacy = ws.join("Api").join("01---stats-X.json");
+            fs::write(&legacy, serde_json::to_string(&req).unwrap()).unwrap();
+            save_request("Api".into(), None, req, Some("01 - stats (X)".into())).unwrap();
+            assert!(!legacy.exists(), "órfão deveria ter sido removido");
+            let data = get_workspace().unwrap();
+            assert_eq!(data.collections[0].requests.len(), 1);
         });
     }
 
