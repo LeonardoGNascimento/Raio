@@ -1436,7 +1436,10 @@ export default function App() {
                 baseUrl,
                 baseUrls,
               );
-              await ensureEnvironments(configTarget.collection, baseUrls.map(([e]) => e));
+              // após rename de collection o diretório já tem o nome novo
+              const envColl =
+                configTarget.folder === null ? newName : configTarget.collection;
+              await ensureEnvironments(envColl, baseUrls.map(([e]) => e));
               if (newName !== configCurrent.name && active) {
                 // container renomeado: atualiza a seleção para o novo path
                 if (configTarget.folder === null && active.collection === configTarget.collection)

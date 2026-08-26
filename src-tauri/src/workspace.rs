@@ -684,3 +684,76 @@ pub fn delete_openapi(collection: String) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod dup_tests {
+    use super::*;
+
+    // HOME é global do processo: serializa os testes e usa um dir único por teste
+    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn with_temp_home<F: FnOnce()>(f: F) {
+        let _guard = HOME_LOCK.lock().unwrap();
+        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let tmp = std::env::temp_dir().join(format!("raio-test-{}-{}", std::process::id(), n));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("HOME", &tmp);
+        f();
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn salvar_config_nao_duplica_collection() {
+        with_temp_home(|| {
+            create_collection("Account".into()).unwrap();
+            save_config(
+                "Account".into(),
+                None,
+                "Account".into(),
+                "".into(),
+                Some(vec![("Prod".into(), "https://x".into())]),
+            )
+            .unwrap();
+            save_environments(
+                "Account".into(),
+                vec![Environment { name: "Prod".into(), vars: vec![] }],
+            )
+            .unwrap();
+            let ws = get_workspace().unwrap();
+            let names: Vec<_> = ws.collections.iter().map(|c| c.name.clone()).collect();
+            assert_eq!(names, vec!["Account"], "listagem: {:?}", names);
+        });
+    }
+
+    #[test]
+    fn renomear_collection_nao_duplica() {
+        with_temp_home(|| {
+            create_collection("Account".into()).unwrap();
+            save_config("Account".into(), None, "Contas".into(), "".into(), None).unwrap();
+            let ws = get_workspace().unwrap();
+            let names: Vec<_> = ws.collections.iter().map(|c| c.name.clone()).collect();
+            assert_eq!(names, vec!["Contas"], "listagem: {:?}", names);
+        });
+    }
+
+    #[test]
+    fn salvar_config_de_pasta_nao_duplica() {
+        with_temp_home(|| {
+            create_collection("Account".into()).unwrap();
+            create_folder("Account".into(), "orders".into()).unwrap();
+            save_config(
+                "Account".into(),
+                Some("orders".into()),
+                "orders".into(),
+                "/orders".into(),
+                None,
+            )
+            .unwrap();
+            let ws = get_workspace().unwrap();
+            assert_eq!(ws.collections.len(), 1);
+            assert_eq!(ws.collections[0].folders.len(), 1);
+        });
+    }
+}
