@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import type { Environment } from "../types";
 import { isGlobalVar } from "../lib/interpolate";
+import {
+  VarSuggestList,
+  applySuggestion,
+  openVarAt,
+  varSuggestions,
+  type OpenVar,
+  type Suggestion,
+} from "./VarSuggest";
 
 const VAR_RE = /\{\{\s*([$@]?[\w.-]+)\s*\}\}/g;
 const DYNAMIC = new Set(["$uuid", "$timestamp", "$isodate", "$random"]);
@@ -135,8 +143,70 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" |
 /** Input de linha única com {{variáveis}} destacadas (overlay atrás do texto). */
 export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }: Props) {
   const underRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [pop, setPop] = useState<{ name: string; left: number } | null>(null);
+  const [sug, setSug] = useState<{ open: OpenVar; items: Suggestion[]; sel: number; left: number } | null>(null);
+
+  const refreshSug = (el: HTMLInputElement) => {
+    const caret = el.selectionStart ?? el.value.length;
+    const open = caret === (el.selectionEnd ?? caret) ? openVarAt(el.value, caret) : null;
+    const items = open ? varSuggestions(open.prefix, env) : [];
+    if (!open || items.length === 0) {
+      setSug(null);
+      return;
+    }
+    const cs = getComputedStyle(el);
+    setMeasureFont(cs);
+    const left = Math.max(
+      0,
+      measureText(el.value.slice(0, open.start)) - el.scrollLeft + parseFloat(cs.paddingLeft),
+    );
+    setSug((prev) => ({
+      open,
+      items,
+      sel: prev && prev.open.start === open.start ? Math.min(prev.sel, items.length - 1) : 0,
+      left: Math.min(left, el.clientWidth - 60),
+    }));
+  };
+
+  const pickSug = (name: string) => {
+    if (!sug) return;
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? value.length;
+    const applied = applySuggestion(value, sug.open, caret, name);
+    onChange(applied.text);
+    setSug(null);
+    requestAnimationFrame(() => {
+      if (el) {
+        el.setSelectionRange(applied.caret, applied.caret);
+        sync(el);
+      }
+    });
+  };
+
+  const onKeyDownSug = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (sug) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const d = e.key === "ArrowDown" ? 1 : -1;
+        setSug({ ...sug, sel: (sug.sel + d + sug.items.length) % sug.items.length });
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        pickSug(sug.items[sug.sel].name);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setSug(null);
+        return;
+      }
+    }
+    rest.onKeyDown?.(e);
+  };
 
   const sync = (el: HTMLInputElement) => {
     if (underRef.current) underRef.current.scrollLeft = el.scrollLeft;
@@ -182,19 +252,38 @@ export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }
       />
       <input
         {...rest}
+        ref={inputRef}
         className={"var-real " + (className ?? "")}
         value={value}
         spellCheck={false}
         onChange={(e) => {
           onChange(e.target.value);
           sync(e.target);
+          refreshSug(e.target);
         }}
         onScroll={(e) => sync(e.currentTarget)}
-        onKeyUp={(e) => sync(e.currentTarget)}
-        onClick={(e) => sync(e.currentTarget)}
+        onKeyUp={(e) => {
+          sync(e.currentTarget);
+          refreshSug(e.currentTarget);
+        }}
+        onKeyDown={onKeyDownSug}
+        onClick={(e) => {
+          sync(e.currentTarget);
+          refreshSug(e.currentTarget);
+        }}
+        onBlur={() => setSug(null)}
         onMouseMove={onMove}
         onMouseLeave={() => pop && scheduleClose()}
       />
+      {sug && (
+        <VarSuggestList
+          items={sug.items}
+          selected={sug.sel}
+          style={{ left: sug.left }}
+          onPick={pickSug}
+          onHover={(i) => setSug({ ...sug, sel: i })}
+        />
+      )}
       {pop && onSaveVar && (
         <VarPop
           key={pop.name}

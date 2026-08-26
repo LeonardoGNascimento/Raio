@@ -607,6 +607,51 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   padding: 4px 12px;
   font-size: 12px;
 }
+
+/* autocomplete de {{variáveis}} */
+.var-sug {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 70;
+  min-width: 240px;
+  max-width: 380px;
+  background: var(--menu);
+  border: 1px solid var(--line-3);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  animation: raioIn 0.1s ease;
+}
+.var-sug-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.var-sug-item.active { background: rgba(var(--rgb-accent), 0.12); }
+.var-sug-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.var-sug-hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.var-sug-hint.global { color: var(--info); }
+.var-sug-hint.dinamica { color: var(--purple); }
 .v-ok { color: var(--accent); }
 .v-miss { color: var(--err); }
 

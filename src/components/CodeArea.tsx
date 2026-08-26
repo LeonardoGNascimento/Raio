@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Environment } from "../types";
-import { VarPop, charIndexInText, setMeasureFont, varAt } from "./VarInput";
+import { VarPop, charIndexInText, measureText, setMeasureFont, varAt } from "./VarInput";
+import {
+  VarSuggestList,
+  applySuggestion,
+  openVarAt,
+  varSuggestions,
+  type OpenVar,
+  type Suggestion,
+} from "./VarSuggest";
 
 interface Props {
   value: string;
@@ -17,8 +25,80 @@ interface Props {
 /** Textarea com camada de syntax highlight atrás (texto transparente + caret visível). */
 export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, env, onSaveVar }: Props) {
   const preRef = useRef<HTMLPreElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [pop, setPop] = useState<{ name: string; left: number; top: number } | null>(null);
+  const [sug, setSug] = useState<{ open: OpenVar; items: Suggestion[]; sel: number; left: number; top: number } | null>(null);
+
+  const refreshSug = (ta: HTMLTextAreaElement) => {
+    if (env === undefined) return; // sem env: campo não usa variáveis
+    const caret = ta.selectionStart ?? ta.value.length;
+    const open = caret === (ta.selectionEnd ?? caret) ? openVarAt(ta.value, caret) : null;
+    const items = open ? varSuggestions(open.prefix, env ?? null) : [];
+    if (!open || items.length === 0) {
+      setSug(null);
+      return;
+    }
+    const cs = getComputedStyle(ta);
+    setMeasureFont(cs);
+    const lineH = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+    const padTop = parseFloat(cs.paddingTop);
+    const padLeft = parseFloat(cs.paddingLeft);
+    const before = ta.value.slice(0, open.start);
+    const lineIdx = (before.match(/\n/g) ?? []).length;
+    const lineStart = before.lastIndexOf("\n") + 1;
+    const left = Math.max(
+      0,
+      Math.min(
+        measureText(before.slice(lineStart)) - ta.scrollLeft + padLeft,
+        ta.clientWidth - 260,
+      ),
+    );
+    const top = (lineIdx + 1) * lineH + padTop - ta.scrollTop;
+    setSug((prev) => ({
+      open,
+      items,
+      sel: prev && prev.open.start === open.start ? Math.min(prev.sel, items.length - 1) : 0,
+      left,
+      top,
+    }));
+  };
+
+  const pickSug = (name: string) => {
+    if (!sug) return;
+    const ta = taRef.current;
+    const caret = ta?.selectionStart ?? value.length;
+    const applied = applySuggestion(value, sug.open, caret, name);
+    onChange(applied.text);
+    setSug(null);
+    requestAnimationFrame(() => {
+      if (ta) {
+        ta.setSelectionRange(applied.caret, applied.caret);
+        syncScroll(ta);
+      }
+    });
+  };
+
+  const onKeyDownAll = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (sug) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const d = e.key === "ArrowDown" ? 1 : -1;
+        setSug({ ...sug, sel: (sug.sel + d + sug.items.length) % sug.items.length });
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickSug(sug.items[sug.sel].name);
+        return;
+      }
+      if (e.key === "Escape") {
+        setSug(null);
+        return;
+      }
+    }
+    onKeyDown?.(e);
+  };
 
   const syncScroll = (ta: HTMLTextAreaElement) => {
     if (preRef.current) {
@@ -78,6 +158,7 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
         dangerouslySetInnerHTML={{ __html: highlight(value) + "\n" }}
       />
       <textarea
+        ref={taRef}
         className="body-input code-area-input"
         placeholder={placeholder}
         value={value}
@@ -85,12 +166,25 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
         onChange={(e) => {
           onChange(e.target.value);
           syncScroll(e.target);
+          refreshSug(e.target);
         }}
-        onKeyDown={onKeyDown}
+        onKeyDown={onKeyDownAll}
+        onKeyUp={(e) => refreshSug(e.currentTarget)}
+        onClick={(e) => refreshSug(e.currentTarget)}
+        onBlur={() => setSug(null)}
         onScroll={(e) => syncScroll(e.currentTarget)}
         onMouseMove={onMove}
         onMouseLeave={() => pop && scheduleClose()}
       />
+      {sug && (
+        <VarSuggestList
+          items={sug.items}
+          selected={sug.sel}
+          style={{ left: sug.left, top: sug.top }}
+          onPick={pickSug}
+          onHover={(i) => setSug({ ...sug, sel: i })}
+        />
+      )}
       {pop && onSaveVar && (
         <VarPop
           key={pop.name}
