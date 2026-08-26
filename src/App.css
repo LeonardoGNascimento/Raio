@@ -927,8 +927,9 @@ mark.find.cur {
 .contract-alert .sub { color: var(--faint); font-weight: 400; }
 .contract-alert .cta { margin-left: auto; font-weight: 600; white-space: nowrap; }
 
-.tabs { display: flex; gap: 4px; padding: 14px 20px 0; flex-wrap: wrap; }
+.tabs { display: flex; gap: 4px; padding: 14px 20px 0; flex-wrap: wrap; align-items: flex-end; }
 .tabs .fill { flex: 1; border-bottom: 1px solid var(--line); min-width: 0; }
+.tab { flex-shrink: 0; }
 .tab {
   background: transparent;
   border: 1px solid transparent;
@@ -955,10 +956,12 @@ mark.find.cur {
 .tab-actions {
   display: flex;
   justify-content: flex-end;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   padding: 0 2px 6px 0;
-  flex-wrap: wrap; /* pane estreito: botões quebram linha em vez de sumir */
+  /* pane estreito: o bloco inteiro desce para a linha de baixo, botões lado a lado */
+  flex: 1 0 auto;
+  flex-wrap: wrap;
 }
 .tab-actions .btn-ghost { white-space: nowrap; }
 .tab-actions .btn-ghost { padding: 4px 11px; font-size: 11px; }
