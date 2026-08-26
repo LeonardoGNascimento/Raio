@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import type { Environment } from "../types";
+import { isGlobalVar } from "../lib/interpolate";
 
 const VAR_RE = /\{\{\s*([$@]?[\w.-]+)\s*\}\}/g;
 const DYNAMIC = new Set(["$uuid", "$timestamp", "$isodate", "$random"]);
@@ -16,7 +17,9 @@ export function highlightVars(text: string, env: Environment | null): string {
   for (const m of text.matchAll(VAR_RE)) {
     out += escHtml(text.slice(last, m.index));
     const name = m[1];
-    const ok = name.startsWith("$") ? DYNAMIC.has(name) : known.has(name);
+    const ok = name.startsWith("$")
+      ? DYNAMIC.has(name)
+      : known.has(name) || isGlobalVar(name);
     out += `<span class="${ok ? "v-ok" : "v-miss"}">${escHtml(m[0])}</span>`;
     last = m.index + m[0].length;
   }
@@ -34,7 +37,7 @@ export function varAt(text: string, idx: number): VarHit | null {
   for (const m of text.matchAll(VAR_RE)) {
     if (idx >= m.index && idx < m.index + m[0].length) {
       const name = m[1];
-      if (name.startsWith("$")) return null;
+      if (name.startsWith("$") || isGlobalVar(name)) return null;
       return { name, start: m.index };
     }
   }
