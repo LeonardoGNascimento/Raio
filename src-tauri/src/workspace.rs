@@ -529,6 +529,20 @@ pub fn delete_snapshot(
 // ---------- Histórico de execuções ----------
 
 const MAX_HISTORY: usize = 10;
+/// teto por body salvo no histórico — sem isso 10 entradas de 10MB atravessam o IPC juntas
+const MAX_HISTORY_BODY: usize = 512 * 1024;
+
+fn truncate_utf8(s: &mut String, max: usize) {
+    if s.len() <= max {
+        return;
+    }
+    let mut cut = max;
+    while cut > 0 && !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    s.truncate(cut);
+    s.push_str("\n… [truncado pelo raio: body maior que 512KB]");
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct HistoryContract {
@@ -615,13 +629,16 @@ pub fn append_history(
     collection: String,
     folder: Option<String>,
     request_name: String,
-    entry: HistoryEntry,
+    mut entry: HistoryEntry,
 ) -> Result<Vec<HistoryEntry>, String> {
     let ws = workspace_dir()?;
     let path = history_path(&ws, &collection, folder.as_deref(), &request_name);
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
+    // bodies gigantes no histórico (10 entradas) travam o load ao abrir a request
+    truncate_utf8(&mut entry.body, MAX_HISTORY_BODY);
+    truncate_utf8(&mut entry.request_body, MAX_HISTORY_BODY);
     let mut hist = read_history(&path);
     hist.push(entry);
     if hist.len() > MAX_HISTORY {

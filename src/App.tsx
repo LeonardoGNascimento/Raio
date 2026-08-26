@@ -843,8 +843,10 @@ export default function App() {
       contentType,
       response.body,
     );
+    // deps granulares: reavaliar a cada tecla do editor congelava com body grande.
+    // URL/params fora das deps de propósito — contrato re-avalia no próximo envio.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, response, activeSpec, env, ws]);
+  }, [active?.request.id, active?.request.contract, response, activeSpec, envName]);
 
   const saveSnapshot = async () => {
     if (!active || !response) return;

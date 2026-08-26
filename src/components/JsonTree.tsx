@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 
 interface NodeProps {
   value: unknown;
@@ -116,7 +116,7 @@ function Node(props: NodeProps) {
 }
 
 /** Árvore JSON com fold por nó. defaultCollapsed=true começa tudo recolhido (menos a raiz). */
-export function JsonTree({
+function JsonTreeInner({
   value,
   defaultCollapsed = false,
 }: {
@@ -147,3 +147,6 @@ export function JsonTree({
     </div>
   );
 }
+
+/** memo: a árvore pode ter milhares de nós — só re-renderiza se o body mudar */
+export const JsonTree = memo(JsonTreeInner);

@@ -131,7 +131,14 @@ export function ResponseViewer(props: Props) {
     () => (response ? prettyBody(response.body, contentType) : ""),
     [response, contentType],
   );
-  const html = useMemo(() => highlightJson(pretty), [pretty]);
+  // regex de highlight em body de vários MB congela o webview: acima do teto vai texto puro
+  const html = useMemo(
+    () =>
+      pretty.length > 1_000_000
+        ? pretty.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        : highlightJson(pretty),
+    [pretty],
+  );
   const gutter = useMemo(() => {
     const n = pretty ? pretty.split("\n").length : 0;
     return Array.from({ length: n }, (_, i) => i + 1).join("\n");
