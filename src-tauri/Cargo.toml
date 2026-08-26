@@ -1,6 +1,6 @@
 [package]
 name = "raio"
-version = "0.3.5"
+version = "0.3.6"
 description = "Raio — HTTP client rápido, offline e git-friendly"
 authors = ["Leonardo Nascimento"]
 edition = "2021"
