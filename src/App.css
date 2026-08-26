@@ -959,10 +959,11 @@ mark.find.cur {
   align-items: center;
   gap: 6px;
   padding: 0 2px 6px 0;
-  /* pane estreito: o bloco inteiro desce para a linha de baixo, botões lado a lado */
-  flex: 1 0 auto;
   flex-wrap: wrap;
 }
+/* especificidade acima de ".tabs .fill": sem shrink, o bloco inteiro desce
+   para a linha de baixo quando não cabe, botões lado a lado */
+.tabs .fill.tab-actions { flex: 1 0 auto; }
 .tab-actions .btn-ghost { white-space: nowrap; }
 .tab-actions .btn-ghost { padding: 4px 11px; font-size: 11px; }
 
