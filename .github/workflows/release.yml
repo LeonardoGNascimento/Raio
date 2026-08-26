@@ -55,16 +55,17 @@ jobs:
             echo "::error::TAURI_SIGNING_PRIVATE_KEY vazio — crie como Repository secret (Settings > Secrets and variables > Actions > aba Secrets)"
             exit 1
           fi
-          FIRST=$(printf '%s' "$KEY" | head -1)
-          if printf '%s' "$FIRST" | grep -qi 'public key'; then
-            echo "::error::o secret contém a chave PÚBLICA (raio.key.pub). Cole o conteúdo de ~/.tauri/raio.key (chave privada, 2 linhas)"
+          DEC=$(printf '%s' "$KEY" | base64 -d 2>/dev/null | head -c 120 || true)
+          HAY="$DEC$KEY"
+          if printf '%s' "$HAY" | grep -qi 'public key'; then
+            echo "::error::o secret contém a chave PÚBLICA (raio.key.pub). Cole o conteúdo de ~/.tauri/raio.key"
             exit 1
           fi
-          if ! printf '%s' "$FIRST" | grep -qi 'secret key'; then
-            echo "::error::formato inesperado no secret (primeira linha deve conter 'minisign encrypted secret key'). Cole o arquivo ~/.tauri/raio.key inteiro"
+          if ! printf '%s' "$HAY" | grep -qi 'secret key'; then
+            echo "::error::secret não parece uma chave privada do tauri signer. Cole o conteúdo exato de ~/.tauri/raio.key"
             exit 1
           fi
-          echo "secret ok: ${#KEY} caracteres"
+          echo "::warning::secret ok · ${#KEY} chars · sha256 $(printf '%s' "$KEY" | sha256sum | cut -c1-16)"
 
       - uses: tauri-apps/tauri-action@v0
         env:
