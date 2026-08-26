@@ -46,6 +46,17 @@ jobs:
 
       - run: npm ci
 
+      - name: valida secret de assinatura
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY vazio — crie como Repository secret (Settings > Secrets and variables > Actions > aba Secrets)"
+            exit 1
+          fi
+          echo "secret presente: ${#KEY} caracteres"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
