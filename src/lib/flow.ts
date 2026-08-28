@@ -28,11 +28,30 @@ export interface FlowNode {
   delayMs?: number;
   /** log node: mensagem impressa no painel ({{vars}} interpoladas) */
   message?: string;
-  /** cond node: expressão tipo "{{total}} > 10", "{{id}} exists" */
+  /** cond node (legado): expressão tipo "{{total}} > 10" */
   expr?: string;
+  /** cond node estruturado: valor, operador, comparação */
+  condLeft?: string;
+  condOp?: string;
+  condRight?: string;
   /** setvar node */
   varName?: string;
   varValue?: string;
+}
+
+export const COND_OPS: [string, string][] = [
+  ["==", "é igual a"],
+  ["!=", "é diferente de"],
+  [">", "é maior que"],
+  ["<", "é menor que"],
+  [">=", "é maior ou igual a"],
+  ["<=", "é menor ou igual a"],
+  ["contains", "contém"],
+  ["exists", "existe (tem valor)"],
+];
+
+export function condOpLabel(op: string): string {
+  return COND_OPS.find(([o]) => o === op)?.[1] ?? op;
 }
 
 /** nós com duas saídas (sucesso/falha) */
@@ -95,11 +114,8 @@ const now = () => new Date().toTimeString().slice(0, 8);
 
 const COND_RE = /^(.+?)\s*(==|!=|>=|<=|>|<|contains|exists)\s*(.*)$/;
 
-/** avalia expressão já interpolada: "a == b", "x > 10", "y contains z", "v exists" */
-export function evalCond(resolved: string): boolean {
-  const m = resolved.trim().match(COND_RE);
-  if (!m) return resolved.trim().length > 0; // sem operador: truthy = não vazio
-  const [, left, op, right] = m;
+/** compara valores já interpolados */
+export function evalCondParts(left: string, op: string, right: string): boolean {
   const l = left.trim();
   const r = right.trim();
   if (op === "exists") return l.length > 0 && !l.includes("{{");
@@ -116,6 +132,14 @@ export function evalCond(resolved: string): boolean {
     case "<=": return numeric && ln <= rn;
     default: return false;
   }
+}
+
+/** avalia expressão legada já interpolada: "a == b", "x > 10", "v exists" */
+export function evalCond(resolved: string): boolean {
+  const m = resolved.trim().match(COND_RE);
+  if (!m) return resolved.trim().length > 0; // sem operador: truthy = não vazio
+  const [, left, op, right] = m;
+  return evalCondParts(left, op, right);
 }
 
 /** roda uma request do fluxo com as vars de sessão acumuladas */
@@ -267,12 +291,23 @@ export async function runFlow(
       return "success";
     }
     if (node.kind === "cond") {
-      const resolved = interpolate(node.expr ?? "", envNow());
-      const pass = evalCond(resolved);
+      const env = envNow();
+      let pass: boolean;
+      let shown: string;
+      if (node.condOp) {
+        const l = interpolate(node.condLeft ?? "", env);
+        const r = interpolate(node.condRight ?? "", env);
+        pass = evalCondParts(l, node.condOp, r);
+        shown = `${l} ${condOpLabel(node.condOp)}${node.condOp === "exists" ? "" : " " + r}`;
+      } else {
+        const resolved = interpolate(node.expr ?? "", env);
+        pass = evalCond(resolved);
+        shown = resolved;
+      }
       cb.onLog({
         at: now(),
         kind: pass ? "ok" : "err",
-        text: `? ${node.expr ?? ""} → ${resolved} → ${pass ? "verdadeiro" : "falso"}`,
+        text: `? ${shown} → ${pass ? "verdadeiro" : "falso"}`,
       });
       cb.onNode(node.id, { ok: pass, problems: pass ? [] : ["condição falsa"], extracted: [] });
       return pass ? "success" : "fail";

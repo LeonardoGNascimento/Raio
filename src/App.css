@@ -2016,6 +2016,26 @@ mark.find.cur {
 .flow-setvar { display: flex; align-items: center; gap: 5px; }
 .flow-var-name { width: 74px; }
 .flow-var-val { width: 92px; }
+.flow-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.flow-title { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.flow-sub {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-gear {
+  background: none;
+  border: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+.flow-gear:hover { color: var(--accent); }
 .flow-nodes, .flow-svg { transform-origin: 0 0; }
 
 /* painel de log da execução */

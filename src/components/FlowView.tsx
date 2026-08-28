@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { DUAL_PORT_KINDS, runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
+import { condOpLabel, DUAL_PORT_KINDS, runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
+import { FlowNodeModal } from "./FlowNodeModal";
+import { resolveBase, withBase } from "../lib/spec";
 import { flattenRequests, METHOD_CLASS, type Collection } from "../types";
 import { Dropdown } from "./Dropdown";
 
@@ -60,6 +62,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
   const [results, setResults] = useState<Record<string, NodeResult | "running">>({});
   const [vars, setVars] = useState<Record<string, string>>({});
   const [log, setLog] = useState<FlowLogEntry[]>([]);
+  const [cfgNode, setCfgNode] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -69,6 +72,10 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const flow = flows.find((f) => f.id === flowId) ?? null;
+  const modalEnv = useMemo(() => {
+    const base = collection.environments.find((e) => e.name === envName) ?? null;
+    return withBase(base, resolveBase(collection, envName));
+  }, [collection, envName]);
   const requests = useMemo(() => flattenRequests(collection), [collection]);
   const reqById = useMemo(() => new Map(requests.map((r) => [r.req.id, r])), [requests]);
 
@@ -144,7 +151,9 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
         {
           id: crypto.randomUUID(),
           kind: "cond",
-          expr: "{{id}} exists",
+          condLeft: "{{id}}",
+          condOp: "exists",
+          condRight: "",
           x: 340 - pan.x / zoom,
           y: 240 - pan.y / zoom,
         },
@@ -160,8 +169,8 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
         {
           id: crypto.randomUUID(),
           kind: "setvar",
-          varName: "minhaVar",
-          varValue: "{{global.uuid}}",
+          varName: "",
+          varValue: "",
           x: 340 - pan.x / zoom,
           y: 300 - pan.y / zoom,
         },
@@ -177,7 +186,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
         {
           id: crypto.randomUUID(),
           kind: "log",
-          message: "id criado: {{id}}",
+          message: "",
           x: 360 - pan.x,
           y: 380 - pan.y,
         },
@@ -517,6 +526,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                   onDoubleClick={() => {
                     if (n.kind === "request" && target)
                       onOpenRequest(target.folder, target.req.id);
+                    else if (n.kind !== "start") setCfgNode(n.id);
                   }}
                   title={
                     res && !res.skipped && res.problems.length > 0
@@ -537,97 +547,38 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                       </span>
                     </>
                   )}
-                  {n.kind === "log" && (
-                    <span className="flow-name">
-                      📋{" "}
-                      <input
-                        className="flow-delay-inp flow-log-inp"
-                        placeholder="mensagem com {{vars}}"
-                        value={n.message ?? ""}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          patchFlow((f) => ({
-                            ...f,
-                            nodes: f.nodes.map((x) =>
-                              x.id === n.id ? { ...x, message: e.target.value } : x,
-                            ),
-                          }))
-                        }
-                      />
+                  {(n.kind === "cond" || n.kind === "setvar" || n.kind === "log" || n.kind === "delay") && (
+                    <span className="flow-summary">
+                      <span className="flow-title">
+                        {n.kind === "cond" && "⑂ Se"}
+                        {n.kind === "setvar" && "✏ Definir variável"}
+                        {n.kind === "log" && "📋 Log"}
+                        {n.kind === "delay" && "⏱ Esperar"}
+                      </span>
+                      <span className="flow-sub">
+                        {n.kind === "cond" &&
+                          (n.condOp
+                            ? `${n.condLeft || "…"} ${condOpLabel(n.condOp)}${n.condOp === "exists" ? "" : " " + (n.condRight || "…")}`
+                            : n.expr || "clique 2x para configurar")}
+                        {n.kind === "setvar" &&
+                          (n.varName ? `{{${n.varName}}} = ${n.varValue || "…"}` : "clique 2x para configurar")}
+                        {n.kind === "log" && (n.message || "clique 2x para configurar")}
+                        {n.kind === "delay" &&
+                          ((n.delayMs ?? 1000) >= 1000
+                            ? (n.delayMs ?? 1000) / 1000 + " segundo(s)"
+                            : (n.delayMs ?? 1000) + "ms")}
+                      </span>
                     </span>
                   )}
-                  {n.kind === "cond" && (
-                    <span className="flow-name">
-                      ⑂{" "}
-                      <input
-                        className="flow-delay-inp flow-log-inp"
-                        placeholder="{{total}} > 10"
-                        value={n.expr ?? ""}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          patchFlow((f) => ({
-                            ...f,
-                            nodes: f.nodes.map((x) =>
-                              x.id === n.id ? { ...x, expr: e.target.value } : x,
-                            ),
-                          }))
-                        }
-                      />
-                    </span>
-                  )}
-                  {n.kind === "setvar" && (
-                    <span className="flow-name flow-setvar">
-                      ✏
-                      <input
-                        className="flow-delay-inp flow-var-name"
-                        placeholder="nome"
-                        value={n.varName ?? ""}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          patchFlow((f) => ({
-                            ...f,
-                            nodes: f.nodes.map((x) =>
-                              x.id === n.id ? { ...x, varName: e.target.value } : x,
-                            ),
-                          }))
-                        }
-                      />
-                      =
-                      <input
-                        className="flow-delay-inp flow-var-val"
-                        placeholder="valor"
-                        value={n.varValue ?? ""}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          patchFlow((f) => ({
-                            ...f,
-                            nodes: f.nodes.map((x) =>
-                              x.id === n.id ? { ...x, varValue: e.target.value } : x,
-                            ),
-                          }))
-                        }
-                      />
-                    </span>
-                  )}
-                  {n.kind === "delay" && (
-                    <span className="flow-name">
-                      ⏱{" "}
-                      <input
-                        className="flow-delay-inp"
-                        type="number"
-                        value={n.delayMs ?? 1000}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          patchFlow((f) => ({
-                            ...f,
-                            nodes: f.nodes.map((x) =>
-                              x.id === n.id ? { ...x, delayMs: Number(e.target.value) || 0 } : x,
-                            ),
-                          }))
-                        }
-                      />{" "}
-                      ms
-                    </span>
+                  {n.kind !== "start" && n.kind !== "request" && (
+                    <button
+                      className="flow-gear"
+                      title="configurar"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => setCfgNode(n.id)}
+                    >
+                      ⚙
+                    </button>
                   )}
                   {res && !res.skipped && (
                     <span className={"flow-badge " + (res.ok ? "c-ok" : "c-err")}>
@@ -694,6 +645,23 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
           )}
         </div>
       )}
+      {cfgNode && flow && (() => {
+        const node = flow.nodes.find((n) => n.id === cfgNode);
+        if (!node) return null;
+        return (
+          <FlowNodeModal
+            node={node}
+            env={modalEnv}
+            onClose={() => setCfgNode(null)}
+            onSave={(patch) =>
+              patchFlow((f) => ({
+                ...f,
+                nodes: f.nodes.map((x) => (x.id === node.id ? { ...x, ...patch } : x)),
+              }))
+            }
+          />
+        );
+      })()}
       {flow && Object.keys(vars).length > 0 && (
         <div className="flow-vars">
           <span className="c-faint">variáveis extraídas:</span>
