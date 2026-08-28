@@ -70,6 +70,8 @@ export interface SavedOutput {
   ok: boolean;
   status?: number;
   totalMs?: number;
+  /** body da response (truncado) */
+  body?: string;
   /** vars acumuladas ANTES do nó rodar — semente para "rodar daqui" */
   varsBefore: Record<string, string>;
   /** vars acumuladas DEPOIS (inclui extraídas por ele) */
@@ -103,7 +105,12 @@ export interface NodeResult {
   problems: string[];
   extracted: [string, string][];
   skipped?: boolean;
+  /** body da response (truncado) para inspeção no canvas */
+  body?: string;
 }
+
+/** teto do body guardado por passo — mantém .flows.json são */
+const MAX_STEP_BODY = 300_000;
 
 export interface FlowRunState {
   running: boolean;
@@ -231,6 +238,7 @@ async function runFlowRequest(
       totalMs: resp.total_ms,
       problems,
       extracted,
+      body: resp.is_binary ? undefined : resp.body.slice(0, MAX_STEP_BODY),
     };
   } catch (e) {
     return { ok: false, problems: ["rede: " + String(e)], extracted: [] };
@@ -262,7 +270,7 @@ export async function runFlow(
   const vars: Record<string, string> = { ...(opts.seedVars ?? {}) };
   const visited = new Set<string>();
   const saved: Record<string, SavedOutput> = {};
-  const meta: Record<string, { status?: number; totalMs?: number }> = {};
+  const meta: Record<string, { status?: number; totalMs?: number; body?: string }> = {};
 
   const start = opts.startId
     ? flow.nodes.find((n) => n.id === opts.startId)
@@ -305,7 +313,7 @@ export async function runFlow(
       for (const [k, v] of result.extracted) vars[k] = v;
       cb.onVars({ ...vars });
       cb.onNode(node.id, result);
-      meta[node.id] = { status: result.status, totalMs: result.totalMs };
+      meta[node.id] = { status: result.status, totalMs: result.totalMs, body: result.body };
       const head = `${target.req.method} ${target.req.name} · ${result.status ?? "?"} · ${result.totalMs ?? "?"}ms`;
       if (result.ok) cb.onLog({ at: now(), kind: "ok", text: `✓ ${head}` });
       else cb.onLog({ at: now(), kind: "err", text: `✗ ${head} — ${result.problems.join(" · ")}` });
@@ -385,6 +393,7 @@ export async function runFlow(
         ok: outcome === "success",
         status: meta[id]?.status,
         totalMs: meta[id]?.totalMs,
+        body: meta[id]?.body,
         varsBefore,
         varsAfter: { ...vars },
       };

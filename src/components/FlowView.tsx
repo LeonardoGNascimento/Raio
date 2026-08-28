@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { condOpLabel, DUAL_PORT_KINDS, runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
 import { FlowNodeModal } from "./FlowNodeModal";
+import { Modal } from "./Modal";
+import { JsonTree } from "./JsonTree";
 import { resolveBase, withBase } from "../lib/spec";
 import { flattenRequests, METHOD_CLASS, type Collection } from "../types";
 import { Dropdown } from "./Dropdown";
@@ -20,6 +22,8 @@ interface DragNode {
   id: string;
   dx: number;
   dy: number;
+  /** houve arraste de verdade (clique parado abre a response) */
+  moved: boolean;
 }
 
 interface Connecting {
@@ -63,6 +67,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
   const [vars, setVars] = useState<Record<string, string>>({});
   const [log, setLog] = useState<FlowLogEntry[]>([]);
   const [cfgNode, setCfgNode] = useState<string | null>(null);
+  const [respNode, setRespNode] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -241,6 +246,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
 
   const onMouseMove = (e: React.MouseEvent) => {
     if (dragNode && flow) {
+      if (!dragNode.moved) setDragNode({ ...dragNode, moved: true });
       const p = canvasPos(e);
       patchFlow((f) => ({
         ...f,
@@ -563,9 +569,22 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                     setSelNode(n.id);
                     setSelEdge(null);
                     const p = canvasPos(e);
-                    setDragNode({ id: n.id, dx: p.x - n.x, dy: p.y - n.y });
+                    setDragNode({ id: n.id, dx: p.x - n.x, dy: p.y - n.y, moved: false });
                   }}
-                  onMouseUp={() => connecting && finishConnect(n.id)}
+                  onMouseUp={() => {
+                    if (connecting) {
+                      finishConnect(n.id);
+                      return;
+                    }
+                    // clique parado numa request com resultado: abre a response
+                    if (
+                      dragNode?.id === n.id &&
+                      !dragNode.moved &&
+                      n.kind === "request" &&
+                      (typeof results[n.id] === "object" || flow.saved?.[n.id]?.body !== undefined)
+                    )
+                      setRespNode(n.id);
+                  }}
                   onDoubleClick={() => {
                     if (n.kind === "request" && target)
                       onOpenRequest(target.folder, target.req.id);
@@ -575,7 +594,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                     res && !res.skipped && res.problems.length > 0
                       ? res.problems.join("\n")
                       : n.kind === "request"
-                        ? "duplo clique abre a request"
+                        ? "clique vê a response · duplo clique abre a request"
                         : undefined
                   }
                 >
@@ -700,6 +719,50 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
           )}
         </div>
       )}
+      {respNode && flow && (() => {
+        const node = flow.nodes.find((n) => n.id === respNode);
+        const target = node?.requestId ? reqById.get(node.requestId) : undefined;
+        if (!node) return null;
+        const fresh = results[node.id];
+        const freshRes = typeof fresh === "object" ? fresh : undefined;
+        const step = flow.saved?.[node.id];
+        const body = freshRes?.body ?? step?.body;
+        const status = freshRes?.status ?? step?.status;
+        const ms = freshRes?.totalMs ?? step?.totalMs;
+        const when = freshRes ? "desta execução" : step ? "do passo salvo às " + new Date(step.at).toLocaleTimeString() : "";
+        let parsed: unknown;
+        let isJson = false;
+        if (body) {
+          try {
+            parsed = JSON.parse(body);
+            isJson = true;
+          } catch {
+            /* não é JSON: mostra texto puro */
+          }
+        }
+        return (
+          <Modal
+            title={(target ? target.req.method + " " + target.req.name : "response") + (status !== undefined ? " · " + status : "") + (ms !== undefined ? " · " + ms + "ms" : "")}
+            width={720}
+            onClose={() => setRespNode(null)}
+          >
+            <div className="modal-hint">response {when}</div>
+            <div className="flow-resp-body">
+              {body === undefined && <span className="c-faint">sem body salvo para este nó — rode o fluxo.</span>}
+              {body !== undefined && isJson && <JsonTree value={parsed} />}
+              {body !== undefined && !isJson && <pre className="flow-resp-raw">{body}</pre>}
+            </div>
+            <div className="modal-foot">
+              {body !== undefined && (
+                <button className="btn-ghost" onClick={() => navigator.clipboard.writeText(body)}>
+                  copiar body
+                </button>
+              )}
+              <button className="btn-primary" onClick={() => setRespNode(null)}>Fechar</button>
+            </div>
+          </Modal>
+        );
+      })()}
       {cfgNode && flow && (() => {
         const node = flow.nodes.find((n) => n.id === cfgNode);
         if (!node) return null;
