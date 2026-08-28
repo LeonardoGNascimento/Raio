@@ -2009,6 +2009,14 @@ mark.find.cur {
 .flow-node.request .flow-port.out.fail { top: calc(50% + 12px); background: var(--err); }
 .flow-log-inp { width: 130px; }
 .flow-node.log { background: rgba(var(--rgb-info), 0.08); border-color: rgba(var(--rgb-info), 0.4); }
+.flow-node.cond .flow-port.out.ok { top: calc(50% - 12px); background: var(--ok); }
+.flow-node.cond .flow-port.out.fail { top: calc(50% + 12px); background: var(--err); }
+.flow-node.cond { background: rgba(var(--rgb-warn), 0.08); border-color: rgba(var(--rgb-warn), 0.4); }
+.flow-node.setvar { background: rgba(var(--rgb-ok), 0.06); border-color: rgba(var(--rgb-ok), 0.35); }
+.flow-setvar { display: flex; align-items: center; gap: 5px; }
+.flow-var-name { width: 74px; }
+.flow-var-val { width: 92px; }
+.flow-nodes, .flow-svg { transform-origin: 0 0; }
 
 /* painel de log da execução */
 .flow-log { border-top: 1px solid var(--line); }

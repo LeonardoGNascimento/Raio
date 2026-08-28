@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
+import { DUAL_PORT_KINDS, runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
 import { flattenRequests, METHOD_CLASS, type Collection } from "../types";
 import { Dropdown } from "./Dropdown";
 
@@ -50,6 +50,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
   const [dirty, setDirty] = useState(false);
   const [naming, setNaming] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
   const [dragNode, setDragNode] = useState<DragNode | null>(null);
   const [panning, setPanning] = useState<{ x: number; y: number } | null>(null);
   const [connecting, setConnecting] = useState<Connecting | null>(null);
@@ -135,6 +136,39 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
     }));
   };
 
+  const addCondNode = () => {
+    patchFlow((f) => ({
+      ...f,
+      nodes: [
+        ...f.nodes,
+        {
+          id: crypto.randomUUID(),
+          kind: "cond",
+          expr: "{{id}} exists",
+          x: 340 - pan.x / zoom,
+          y: 240 - pan.y / zoom,
+        },
+      ],
+    }));
+  };
+
+  const addVarNode = () => {
+    patchFlow((f) => ({
+      ...f,
+      nodes: [
+        ...f.nodes,
+        {
+          id: crypto.randomUUID(),
+          kind: "setvar",
+          varName: "minhaVar",
+          varValue: "{{global.uuid}}",
+          x: 340 - pan.x / zoom,
+          y: 300 - pan.y / zoom,
+        },
+      ],
+    }));
+  };
+
   const addLogNode = () => {
     patchFlow((f) => ({
       ...f,
@@ -176,7 +210,24 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
 
   const canvasPos = (e: React.MouseEvent): { x: number; y: number } => {
     const rect = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left - pan.x, y: e.clientY - rect.top - pan.y };
+    return {
+      x: (e.clientX - rect.left - pan.x) / zoom,
+      y: (e.clientY - rect.top - pan.y) / zoom,
+    };
+  };
+
+  /** zoom com scroll, centrado no cursor */
+  const onWheel = (e: React.WheelEvent) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const next = Math.min(2, Math.max(0.35, zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
+    // mantém o ponto sob o cursor fixo
+    setPan({
+      x: mx - ((mx - pan.x) / zoom) * next,
+      y: my - ((my - pan.y) / zoom) * next,
+    });
+    setZoom(next);
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
@@ -218,6 +269,20 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
     setConnecting(null);
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      if (selEdge) removeEdge(selEdge);
+      else if (selNode && flow?.nodes.find((n) => n.id === selNode)?.kind !== "start")
+        removeNode(selNode);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selEdge, selNode, flow]);
+
   const run = async () => {
     if (!flow || running) return;
     setRunning(true);
@@ -240,7 +305,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
 
   const nodeCenter = (n: FlowNode, side: "in" | "out", cond: EdgeCond = "always") => {
     let dy = 0;
-    if (side === "out" && n.kind === "request")
+    if (side === "out" && DUAL_PORT_KINDS.has(n.kind))
       dy = cond === "success" ? -12 : cond === "fail" ? 12 : 0;
     return { x: n.x + (side === "out" ? NODE_W : 0), y: n.y + NODE_H / 2 + dy };
   };
@@ -327,8 +392,11 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
             </Dropdown>
             <button className="btn-ghost" onClick={addDelayNode}>＋ delay</button>
             <button className="btn-ghost" onClick={addLogNode}>＋ log</button>
+            <button className="btn-ghost" onClick={addCondNode}>＋ if</button>
+            <button className="btn-ghost" onClick={addVarNode}>＋ var</button>
             <span className="flow-hint">
-              arraste do ponto ● para conectar · clique na aresta para mudar a condição
+              arraste das portas ✓/✗ para conectar (várias saídas = paralelo) · scroll = zoom ·
+              Delete apaga a seleção
             </span>
             <div style={{ flex: 1 }} />
             {selEdge && (
@@ -365,6 +433,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
         <div
           ref={canvasRef}
           className="flow-canvas"
+          onWheel={onWheel}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseUp}
@@ -376,7 +445,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
             }
           }}
         >
-          <svg className="flow-svg" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
+          <svg className="flow-svg" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             {flow.edges.map((e) => {
               const from = flow.nodes.find((n) => n.id === e.from);
               const to = flow.nodes.find((n) => n.id === e.to);
@@ -425,7 +494,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
             })()}
           </svg>
 
-          <div className="flow-nodes" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
+          <div className="flow-nodes" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             {flow.nodes.map((n) => {
               const target = n.requestId ? reqById.get(n.requestId) : undefined;
               const r = results[n.id];
@@ -487,6 +556,59 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                       />
                     </span>
                   )}
+                  {n.kind === "cond" && (
+                    <span className="flow-name">
+                      ⑂{" "}
+                      <input
+                        className="flow-delay-inp flow-log-inp"
+                        placeholder="{{total}} > 10"
+                        value={n.expr ?? ""}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          patchFlow((f) => ({
+                            ...f,
+                            nodes: f.nodes.map((x) =>
+                              x.id === n.id ? { ...x, expr: e.target.value } : x,
+                            ),
+                          }))
+                        }
+                      />
+                    </span>
+                  )}
+                  {n.kind === "setvar" && (
+                    <span className="flow-name flow-setvar">
+                      ✏
+                      <input
+                        className="flow-delay-inp flow-var-name"
+                        placeholder="nome"
+                        value={n.varName ?? ""}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          patchFlow((f) => ({
+                            ...f,
+                            nodes: f.nodes.map((x) =>
+                              x.id === n.id ? { ...x, varName: e.target.value } : x,
+                            ),
+                          }))
+                        }
+                      />
+                      =
+                      <input
+                        className="flow-delay-inp flow-var-val"
+                        placeholder="valor"
+                        value={n.varValue ?? ""}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          patchFlow((f) => ({
+                            ...f,
+                            nodes: f.nodes.map((x) =>
+                              x.id === n.id ? { ...x, varValue: e.target.value } : x,
+                            ),
+                          }))
+                        }
+                      />
+                    </span>
+                  )}
                   {n.kind === "delay" && (
                     <span className="flow-name">
                       ⏱{" "}
@@ -515,7 +637,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                   )}
                   {res?.skipped && <span className="flow-badge c-faint">pulado</span>}
                   {n.kind !== "start" && <span className="flow-port in" />}
-                  {n.kind === "request" ? (
+                  {DUAL_PORT_KINDS.has(n.kind) ? (
                     <>
                       <span
                         className="flow-port out ok"

@@ -19,7 +19,7 @@ export type EdgeCond = "always" | "success" | "fail";
 
 export interface FlowNode {
   id: string;
-  kind: "start" | "request" | "delay" | "log";
+  kind: "start" | "request" | "delay" | "log" | "cond" | "setvar";
   x: number;
   y: number;
   /** request node: id da request na collection */
@@ -28,7 +28,15 @@ export interface FlowNode {
   delayMs?: number;
   /** log node: mensagem impressa no painel ({{vars}} interpoladas) */
   message?: string;
+  /** cond node: expressão tipo "{{total}} > 10", "{{id}} exists" */
+  expr?: string;
+  /** setvar node */
+  varName?: string;
+  varValue?: string;
 }
+
+/** nós com duas saídas (sucesso/falha) */
+export const DUAL_PORT_KINDS = new Set(["request", "cond"]);
 
 export interface FlowEdge {
   id: string;
@@ -84,6 +92,31 @@ interface RunCallbacks {
 }
 
 const now = () => new Date().toTimeString().slice(0, 8);
+
+const COND_RE = /^(.+?)\s*(==|!=|>=|<=|>|<|contains|exists)\s*(.*)$/;
+
+/** avalia expressão já interpolada: "a == b", "x > 10", "y contains z", "v exists" */
+export function evalCond(resolved: string): boolean {
+  const m = resolved.trim().match(COND_RE);
+  if (!m) return resolved.trim().length > 0; // sem operador: truthy = não vazio
+  const [, left, op, right] = m;
+  const l = left.trim();
+  const r = right.trim();
+  if (op === "exists") return l.length > 0 && !l.includes("{{");
+  if (op === "contains") return l.includes(r);
+  const ln = Number(l);
+  const rn = Number(r);
+  const numeric = l !== "" && r !== "" && !Number.isNaN(ln) && !Number.isNaN(rn);
+  switch (op) {
+    case "==": return numeric ? ln === rn : l === r;
+    case "!=": return numeric ? ln !== rn : l !== r;
+    case ">": return numeric && ln > rn;
+    case "<": return numeric && ln < rn;
+    case ">=": return numeric && ln >= rn;
+    case "<=": return numeric && ln <= rn;
+    default: return false;
+  }
+}
 
 /** roda uma request do fluxo com as vars de sessão acumuladas */
 async function runFlowRequest(
@@ -188,67 +221,106 @@ export async function runFlow(
   if (!start) return;
   cb.onLog({ at: now(), kind: "info", text: `fluxo "${flow.name}" · ambiente ${envName || "(nenhum)"}` });
 
-  // fila sequencial: nó -> roda -> enfileira saídas compatíveis
-  const queue: string[] = [start.id];
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
-    if (visited.has(nodeId)) continue; // proteção contra ciclo
-    visited.add(nodeId);
-    const node = byId.get(nodeId);
-    if (!node) continue;
+  /** ambiente + vars acumuladas, para interpolar mensagens/condições */
+  const envNow = () => {
+    const baseEnv = coll.environments.find((e) => e.name === envName) ?? null;
+    const overlay: Environment = {
+      name: baseEnv?.name ?? "(fluxo)",
+      vars: [...(baseEnv?.vars ?? []), ...Object.entries(vars)] as [string, string][],
+    };
+    return withBase(overlay, resolveBase(coll, envName)) ?? overlay;
+  };
 
-    let outcome: "success" | "fail" = "success";
+  /** executa um nó e devolve o resultado da ramificação */
+  const execNode = async (node: FlowNode): Promise<"success" | "fail"> => {
     if (node.kind === "request") {
       const target = node.requestId ? reqIndex.get(node.requestId) : undefined;
       if (!target) {
-        cb.onNode(nodeId, { ok: false, problems: ["request não existe mais"], extracted: [] });
+        cb.onNode(node.id, { ok: false, problems: ["request não existe mais"], extracted: [] });
         cb.onLog({ at: now(), kind: "err", text: "nó aponta para request que não existe mais" });
-        outcome = "fail";
-      } else {
-        cb.onNode(nodeId, "running");
-        cb.onLog({ at: now(), kind: "info", text: `→ ${target.req.method} ${target.req.name}` });
-        const result = await runFlowRequest(coll, target.folder, target.req, spec, envName, vars);
-        for (const [k, v] of result.extracted) vars[k] = v;
-        cb.onVars({ ...vars });
-        cb.onNode(nodeId, result);
-        outcome = result.ok ? "success" : "fail";
-        const head = `${target.req.method} ${target.req.name} · ${result.status ?? "?"} · ${result.totalMs ?? "?"}ms`;
-        if (result.ok) cb.onLog({ at: now(), kind: "ok", text: `✓ ${head}` });
-        else cb.onLog({ at: now(), kind: "err", text: `✗ ${head} — ${result.problems.join(" · ")}` });
-        for (const [k, v] of result.extracted)
-          cb.onLog({ at: now(), kind: "info", text: `  {{${k}}} = ${v.length > 60 ? v.slice(0, 60) + "…" : v}` });
+        return "fail";
       }
-    } else if (node.kind === "delay") {
-      cb.onNode(nodeId, "running");
+      cb.onNode(node.id, "running");
+      cb.onLog({ at: now(), kind: "info", text: `→ ${target.req.method} ${target.req.name}` });
+      const result = await runFlowRequest(coll, target.folder, target.req, spec, envName, vars);
+      for (const [k, v] of result.extracted) vars[k] = v;
+      cb.onVars({ ...vars });
+      cb.onNode(node.id, result);
+      const head = `${target.req.method} ${target.req.name} · ${result.status ?? "?"} · ${result.totalMs ?? "?"}ms`;
+      if (result.ok) cb.onLog({ at: now(), kind: "ok", text: `✓ ${head}` });
+      else cb.onLog({ at: now(), kind: "err", text: `✗ ${head} — ${result.problems.join(" · ")}` });
+      for (const [k, v] of result.extracted)
+        cb.onLog({ at: now(), kind: "info", text: `  {{${k}}} = ${v.length > 60 ? v.slice(0, 60) + "…" : v}` });
+      return result.ok ? "success" : "fail";
+    }
+    if (node.kind === "delay") {
+      cb.onNode(node.id, "running");
       cb.onLog({ at: now(), kind: "info", text: `⏱ aguardando ${node.delayMs ?? 1000}ms` });
       await new Promise((r) => setTimeout(r, node.delayMs ?? 1000));
-      cb.onNode(nodeId, { ok: true, problems: [], extracted: [] });
-    } else if (node.kind === "log") {
-      const baseEnv = coll.environments.find((e) => e.name === envName) ?? null;
-      const overlay = {
-        name: baseEnv?.name ?? "(fluxo)",
-        vars: [...(baseEnv?.vars ?? []), ...Object.entries(vars)] as [string, string][],
-      };
-      const msg = interpolate(node.message ?? "", withBase(overlay, resolveBase(coll, envName)) ?? overlay);
-      cb.onLog({ at: now(), kind: "print", text: msg || "(log vazio)" });
-      cb.onNode(nodeId, { ok: true, problems: [], extracted: [] });
+      cb.onNode(node.id, { ok: true, problems: [], extracted: [] });
+      return "success";
     }
+    if (node.kind === "log") {
+      const msg = interpolate(node.message ?? "", envNow());
+      cb.onLog({ at: now(), kind: "print", text: msg || "(log vazio)" });
+      cb.onNode(node.id, { ok: true, problems: [], extracted: [] });
+      return "success";
+    }
+    if (node.kind === "cond") {
+      const resolved = interpolate(node.expr ?? "", envNow());
+      const pass = evalCond(resolved);
+      cb.onLog({
+        at: now(),
+        kind: pass ? "ok" : "err",
+        text: `? ${node.expr ?? ""} → ${resolved} → ${pass ? "verdadeiro" : "falso"}`,
+      });
+      cb.onNode(node.id, { ok: pass, problems: pass ? [] : ["condição falsa"], extracted: [] });
+      return pass ? "success" : "fail";
+    }
+    if (node.kind === "setvar") {
+      const name = (node.varName ?? "").trim();
+      if (name) {
+        vars[name] = interpolate(node.varValue ?? "", envNow());
+        cb.onVars({ ...vars });
+        cb.onLog({ at: now(), kind: "info", text: `✏ {{${name}}} = ${vars[name]}` });
+      }
+      cb.onNode(node.id, { ok: true, problems: [], extracted: [] });
+      return "success";
+    }
+    return "success"; // start
+  };
 
-    for (const edge of flow.edges.filter((e) => e.from === nodeId)) {
-      const pass =
-        edge.cond === "always" ||
-        (edge.cond === "success" && outcome === "success") ||
-        (edge.cond === "fail" && outcome === "fail");
-      if (pass) queue.push(edge.to);
-      else if (!visited.has(edge.to)) {
-        // marca destinos não alcançados como pulados (visual)
-        const reachableOther = flow.edges.some(
-          (e) => e.to === edge.to && e.id !== edge.id && !visited.has(e.from),
-        );
-        if (!reachableOther)
-          cb.onNode(edge.to, { ok: true, problems: [], extracted: [], skipped: true });
+  // execução em ondas: ramificações da mesma onda rodam em paralelo
+  let wave: string[] = [start.id];
+  while (wave.length > 0) {
+    const batch = [...new Set(wave)].filter((id) => !visited.has(id) && byId.has(id));
+    batch.forEach((id) => visited.add(id));
+    if (batch.length === 0) break;
+    if (batch.length > 1)
+      cb.onLog({ at: now(), kind: "info", text: `⇉ ${batch.length} ramos em paralelo` });
+
+    const outcomes = await Promise.all(
+      batch.map(async (id) => ({ id, outcome: await execNode(byId.get(id)!) })),
+    );
+
+    const next: string[] = [];
+    for (const { id, outcome } of outcomes) {
+      for (const edge of flow.edges.filter((e) => e.from === id)) {
+        const pass =
+          edge.cond === "always" ||
+          (edge.cond === "success" && outcome === "success") ||
+          (edge.cond === "fail" && outcome === "fail");
+        if (pass) next.push(edge.to);
+        else if (!visited.has(edge.to)) {
+          const reachableOther = flow.edges.some(
+            (e) => e.to === edge.to && e.id !== edge.id && !visited.has(e.from),
+          );
+          if (!reachableOther)
+            cb.onNode(edge.to, { ok: true, problems: [], extracted: [], skipped: true });
+        }
       }
     }
+    wave = next;
   }
   cb.onLog({ at: now(), kind: "info", text: "fim do fluxo" });
 }
