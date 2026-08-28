@@ -292,7 +292,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selEdge, selNode, flow]);
 
-  const run = async () => {
+  const runWith = async (opts: { startId?: string; seedVars?: Record<string, string> }) => {
     if (!flow || running) return;
     setRunning(true);
     setResults({});
@@ -300,14 +300,35 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
     setLog([]);
     setLogOpen(true);
     try {
-      await runFlow(flow, collection, spec, envName, {
-        onNode: (nodeId, state) => setResults((r) => ({ ...r, [nodeId]: state })),
-        onVars: setVars,
-        onLog: (entry) => setLog((l) => [...l, entry]),
-      });
+      const saved = await runFlow(
+        flow,
+        collection,
+        spec,
+        envName,
+        {
+          onNode: (nodeId, state) => setResults((r) => ({ ...r, [nodeId]: state })),
+          onVars: setVars,
+          onLog: (entry) => setLog((l) => [...l, entry]),
+        },
+        opts,
+      );
+      // persiste os passos (steps) no fluxo, sem mexer no estado de dirty do desenho
+      const updated = flows.map((f) =>
+        f.id === flow.id ? { ...f, saved: { ...(f.saved ?? {}), ...saved } } : f,
+      );
+      setFlows(updated);
+      api.saveFlows(collection.name, updated).catch(() => {});
     } finally {
       setRunning(false);
     }
+  };
+
+  const run = () => runWith({});
+
+  const runFromNode = (nodeId: string) => {
+    if (!flow) return;
+    const step = flow.saved?.[nodeId];
+    runWith({ startId: nodeId, seedVars: step?.varsBefore ?? {} });
   };
 
   // ---------- render ----------
@@ -414,8 +435,30 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
               </button>
             )}
             {selNode && flow.nodes.find((n) => n.id === selNode)?.kind !== "start" && (
-              <button className="btn-ghost" onClick={() => removeNode(selNode)}>
-                excluir nó
+              <>
+                <button
+                  className="btn-ghost"
+                  title="roda deste nó em diante, usando as variáveis salvas do passo anterior"
+                  onClick={() => runFromNode(selNode)}
+                  disabled={running}
+                >
+                  ▶ rodar daqui
+                </button>
+                <button className="btn-ghost" onClick={() => removeNode(selNode)}>
+                  excluir nó
+                </button>
+              </>
+            )}
+            {flow.saved && Object.keys(flow.saved).length > 0 && (
+              <button
+                className="btn-ghost"
+                title="descarta os resultados salvos dos passos"
+                onClick={() => {
+                  patchFlow((f) => ({ ...f, saved: {} }));
+                  setResults({});
+                }}
+              >
+                limpar passos
               </button>
             )}
             <button className="btn-ghost" onClick={save} disabled={!dirty}>
@@ -587,6 +630,18 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                     </span>
                   )}
                   {res?.skipped && <span className="flow-badge c-faint">pulado</span>}
+                  {!r && flow.saved?.[n.id] && (
+                    <span
+                      className="flow-badge flow-saved"
+                      title={
+                        "passo salvo às " +
+                        new Date(flow.saved[n.id].at).toLocaleTimeString() +
+                        " — selecione o nó e use ▶ rodar daqui"
+                      }
+                    >
+                      💾 {flow.saved[n.id].status ?? (flow.saved[n.id].ok ? "✓" : "✗")}
+                    </span>
+                  )}
                   {n.kind !== "start" && <span className="flow-port in" />}
                   {DUAL_PORT_KINDS.has(n.kind) ? (
                     <>

@@ -64,11 +64,25 @@ export interface FlowEdge {
   cond: EdgeCond;
 }
 
+/** resultado salvo de um nó (steps estilo n8n): permite rodar dali em diante */
+export interface SavedOutput {
+  at: string; // ISO
+  ok: boolean;
+  status?: number;
+  totalMs?: number;
+  /** vars acumuladas ANTES do nó rodar — semente para "rodar daqui" */
+  varsBefore: Record<string, string>;
+  /** vars acumuladas DEPOIS (inclui extraídas por ele) */
+  varsAfter: Record<string, string>;
+}
+
 export interface Flow {
   id: string;
   name: string;
   nodes: FlowNode[];
   edges: FlowEdge[];
+  /** últimas execuções salvas por nó */
+  saved?: Record<string, SavedOutput>;
 }
 
 export function newFlow(name: string): Flow {
@@ -227,23 +241,44 @@ async function runFlowRequest(
  * Executa o fluxo a partir do nó start, seguindo arestas cuja condição bate
  * com o resultado do nó de origem. Vars extraídas encadeiam para os próximos.
  */
+export interface RunOptions {
+  /** roda a partir deste nó (semente = vars salvas do passo anterior) */
+  startId?: string;
+  seedVars?: Record<string, string>;
+}
+
 export async function runFlow(
   flow: Flow,
   coll: Collection,
   spec: Record<string, unknown> | null,
   envName: string,
   cb: RunCallbacks,
-): Promise<void> {
+  opts: RunOptions = {},
+): Promise<Record<string, SavedOutput>> {
   const byId = new Map(flow.nodes.map((n) => [n.id, n]));
   const reqIndex = new Map(
     flattenRequests(coll).map(({ folder, req }) => [req.id, { folder, req }]),
   );
-  const vars: Record<string, string> = {};
+  const vars: Record<string, string> = { ...(opts.seedVars ?? {}) };
   const visited = new Set<string>();
+  const saved: Record<string, SavedOutput> = {};
+  const meta: Record<string, { status?: number; totalMs?: number }> = {};
 
-  const start = flow.nodes.find((n) => n.kind === "start");
-  if (!start) return;
-  cb.onLog({ at: now(), kind: "info", text: `fluxo "${flow.name}" · ambiente ${envName || "(nenhum)"}` });
+  const start = opts.startId
+    ? flow.nodes.find((n) => n.id === opts.startId)
+    : flow.nodes.find((n) => n.kind === "start");
+  if (!start) return saved;
+  if (opts.startId) {
+    const seedCount = Object.keys(vars).length;
+    cb.onLog({
+      at: now(),
+      kind: "info",
+      text: `▶ rodando a partir deste nó · ${seedCount > 0 ? seedCount + " variável(is) do passo salvo" : "sem dados salvos do passo anterior"} · ambiente ${envName || "(nenhum)"}`,
+    });
+    if (seedCount > 0) cb.onVars({ ...vars });
+  } else {
+    cb.onLog({ at: now(), kind: "info", text: `fluxo "${flow.name}" · ambiente ${envName || "(nenhum)"}` });
+  }
 
   /** ambiente + vars acumuladas, para interpolar mensagens/condições */
   const envNow = () => {
@@ -270,6 +305,7 @@ export async function runFlow(
       for (const [k, v] of result.extracted) vars[k] = v;
       cb.onVars({ ...vars });
       cb.onNode(node.id, result);
+      meta[node.id] = { status: result.status, totalMs: result.totalMs };
       const head = `${target.req.method} ${target.req.name} · ${result.status ?? "?"} · ${result.totalMs ?? "?"}ms`;
       if (result.ok) cb.onLog({ at: now(), kind: "ok", text: `✓ ${head}` });
       else cb.onLog({ at: now(), kind: "err", text: `✗ ${head} — ${result.problems.join(" · ")}` });
@@ -335,8 +371,24 @@ export async function runFlow(
       cb.onLog({ at: now(), kind: "info", text: `⇉ ${batch.length} ramos em paralelo` });
 
     const outcomes = await Promise.all(
-      batch.map(async (id) => ({ id, outcome: await execNode(byId.get(id)!) })),
+      batch.map(async (id) => {
+        const varsBefore = { ...vars };
+        const startedAt = new Date().toISOString();
+        const outcome = await execNode(byId.get(id)!);
+        return { id, outcome, varsBefore, startedAt };
+      }),
     );
+    for (const { id, outcome, varsBefore, startedAt } of outcomes) {
+      if (byId.get(id)!.kind === "start") continue;
+      saved[id] = {
+        at: startedAt,
+        ok: outcome === "success",
+        status: meta[id]?.status,
+        totalMs: meta[id]?.totalMs,
+        varsBefore,
+        varsAfter: { ...vars },
+      };
+    }
 
     const next: string[] = [];
     for (const { id, outcome } of outcomes) {
@@ -358,4 +410,5 @@ export async function runFlow(
     wave = next;
   }
   cb.onLog({ at: now(), kind: "info", text: "fim do fluxo" });
+  return saved;
 }

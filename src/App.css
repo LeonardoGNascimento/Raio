@@ -2036,6 +2036,7 @@ mark.find.cur {
   flex-shrink: 0;
 }
 .flow-gear:hover { color: var(--accent); }
+.flow-badge.flow-saved { color: var(--dim); border-style: dashed; }
 .flow-nodes, .flow-svg { transform-origin: 0 0; }
 
 /* painel de log da execução */
