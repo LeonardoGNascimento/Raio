@@ -31,6 +31,7 @@ import { OpenApiModal } from "./components/OpenApiModal";
 import { ExportModal } from "./components/ExportModal";
 import { ConfigModal, type ConfigTarget } from "./components/ConfigModal";
 import { DashboardView } from "./components/DashboardView";
+import { FlowView } from "./components/FlowView";
 import { NewRequestModal } from "./components/NewRequestModal";
 import { ThemeModal } from "./components/ThemeModal";
 import { ImportModal } from "./components/ImportModal";
@@ -80,6 +81,7 @@ export default function App() {
   const [tracePort, setTracePort] = useState(7741);
   const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<string | null>(null);
+  const [flowsColl, setFlowsColl] = useState<string | null>(null);
   const [checks, setChecks] = useState<CheckResult[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -248,7 +250,7 @@ export default function App() {
   }, [reload]);
 
   /** collection em contexto (request ativa ou dashboard) */
-  const curColl = active?.collection ?? dashboard ?? null;
+  const curColl = active?.collection ?? dashboard ?? flowsColl ?? null;
   const envsOf = (collection: string | null): Environment[] =>
     collection
       ? (ws?.collections.find((c) => c.name === collection)?.environments ?? [])
@@ -320,6 +322,7 @@ export default function App() {
     );
     setRestoredFrom(null);
     setDashboard(null);
+    setFlowsColl(null);
     setActive({ collection, folder, request: structuredClone(request), savedName: request.name, dirty: false });
     setResponse(null);
     setSendError(null);
@@ -1055,8 +1058,14 @@ export default function App() {
           setDeleteReqAsk({ collection, folder, request: req })
         }
         onConfig={(collection, folder) => setConfigTarget({ collection, folder })}
+        onOpenFlows={(collection) => {
+          setDashboard(null);
+          ensureSpec(collection);
+          setFlowsColl(collection);
+        }}
         onOpenDashboard={(collection) => {
           ensureSpec(collection);
+          setFlowsColl(null);
           setDashboard(collection);
         }}
         errorIds={new Set(Object.keys(errDots).filter((id) => errDots[id]))}
@@ -1140,7 +1149,22 @@ export default function App() {
           </button>
         </div>
 
-        {dashboard && ws.collections.some((c) => c.name === dashboard) ? (
+        {flowsColl && ws.collections.some((c) => c.name === flowsColl) ? (
+          <FlowView
+            key={flowsColl}
+            collection={ws.collections.find((c) => c.name === flowsColl)!}
+            spec={specs[flowsColl] ?? null}
+            envName={envName}
+            onOpenRequest={(_folder, requestId) => {
+              const coll = ws.collections.find((c) => c.name === flowsColl)!;
+              const hit = flattenRequests(coll).find(({ req }) => req.id === requestId);
+              if (hit) {
+                setFlowsColl(null);
+                focusRequest(flowsColl, hit.folder, hit.req);
+              }
+            }}
+          />
+        ) : dashboard && ws.collections.some((c) => c.name === dashboard) ? (
           <DashboardView
             key={dashboard}
             collection={ws.collections.find((c) => c.name === dashboard)!}

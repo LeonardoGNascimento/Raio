@@ -671,6 +671,34 @@ pub fn append_history(
     Ok(hist)
 }
 
+// ---------- Fluxos (canvas) ----------
+
+fn flows_path(ws: &Path, collection: &str) -> PathBuf {
+    ws.join(sanitize(collection)).join(".flows.json")
+}
+
+#[tauri::command]
+pub fn load_flows(collection: String) -> Result<serde_json::Value, String> {
+    let ws = workspace_dir()?;
+    let path = flows_path(&ws, &collection);
+    if !path.exists() {
+        return Ok(serde_json::Value::Array(vec![]));
+    }
+    let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&raw).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_flows(collection: String, flows: serde_json::Value) -> Result<(), String> {
+    let ws = workspace_dir()?;
+    let dir = ws.join(sanitize(&collection));
+    if !dir.exists() {
+        return Err("Collection não existe".into());
+    }
+    let raw = serde_json::to_string_pretty(&flows).map_err(|e| e.to_string())?;
+    fs::write(flows_path(&ws, &collection), raw).map_err(|e| e.to_string())
+}
+
 // ---------- OpenAPI ----------
 
 fn openapi_path(ws: &Path, collection: &str) -> PathBuf {

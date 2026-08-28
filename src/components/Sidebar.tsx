@@ -26,6 +26,7 @@ interface Props {
   onRenameCollection: (name: string, newName: string) => void;
   onConfig: (collection: string, folder: string | null) => void;
   onOpenDashboard: (collection: string) => void;
+  onOpenFlows: (collection: string) => void;
   onMoveRequest: (
     from: { collection: string; folder: string | null; name: string; id: string },
     to: { collection: string; folder: string | null },
@@ -401,6 +402,15 @@ export function Sidebar(props: Props) {
                         }}
                       >
                         <span className="c-dim">▸</span> nova pasta
+                      </button>
+                      <button
+                        className="dd-item"
+                        onClick={() => {
+                          close();
+                          props.onOpenFlows(coll.name);
+                        }}
+                      >
+                        <span className="c-accent">⛓</span> fluxos
                       </button>
                     </>
                   )}
