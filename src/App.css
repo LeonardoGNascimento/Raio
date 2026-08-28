@@ -2004,6 +2004,48 @@ mark.find.cur {
 .flow-port.in { left: -7px; }
 .flow-port.out { right: -7px; cursor: crosshair; background: var(--accent); }
 .flow-port.out:hover { transform: translateY(-50%) scale(1.35); }
+/* request: duas saídas — sucesso (verde, cima) e erro (vermelha, baixo) */
+.flow-node.request .flow-port.out.ok { top: calc(50% - 12px); background: var(--ok); }
+.flow-node.request .flow-port.out.fail { top: calc(50% + 12px); background: var(--err); }
+.flow-log-inp { width: 130px; }
+.flow-node.log { background: rgba(var(--rgb-info), 0.08); border-color: rgba(var(--rgb-info), 0.4); }
+
+/* painel de log da execução */
+.flow-log { border-top: 1px solid var(--line); }
+.flow-log-head {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  padding: 8px 18px;
+  cursor: pointer;
+}
+.flow-log-head:hover { color: var(--text); }
+.flow-log-body {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 0 18px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.9;
+}
+.flow-log-line { display: flex; gap: 10px; align-items: baseline; white-space: pre-wrap; }
+.flow-log-at { color: var(--gutter); flex-shrink: 0; }
+.flow-log-line.ok .flow-log-text { color: var(--ok); }
+.flow-log-line.err .flow-log-text { color: var(--err); }
+.flow-log-line.info .flow-log-text { color: var(--dim); }
+.flow-log-line.print .flow-log-text { color: var(--accent); font-weight: 600; }
+.flow-log-tag {
+  background: rgba(var(--rgb-accent), 0.14);
+  color: var(--accent);
+  border-radius: 5px;
+  padding: 0 6px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
 .flow-delay-inp {
   width: 64px;
   background: var(--input);

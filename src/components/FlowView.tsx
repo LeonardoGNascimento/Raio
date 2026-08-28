@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { runFlow, newFlow, type EdgeCond, type Flow, type FlowNode, type NodeResult } from "../lib/flow";
+import { runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
 import { flattenRequests, METHOD_CLASS, type Collection } from "../types";
 import { Dropdown } from "./Dropdown";
 
@@ -22,6 +22,7 @@ interface DragNode {
 
 interface Connecting {
   from: string;
+  cond: EdgeCond;
   x: number;
   y: number;
 }
@@ -57,6 +58,13 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<Record<string, NodeResult | "running">>({});
   const [vars, setVars] = useState<Record<string, string>>({});
+  const [log, setLog] = useState<FlowLogEntry[]>([]);
+  const [logOpen, setLogOpen] = useState(true);
+  const logRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
+  }, [log]);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const flow = flows.find((f) => f.id === flowId) ?? null;
@@ -127,6 +135,22 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
     }));
   };
 
+  const addLogNode = () => {
+    patchFlow((f) => ({
+      ...f,
+      nodes: [
+        ...f.nodes,
+        {
+          id: crypto.randomUUID(),
+          kind: "log",
+          message: "id criado: {{id}}",
+          x: 360 - pan.x,
+          y: 380 - pan.y,
+        },
+      ],
+    }));
+  };
+
   const removeNode = (id: string) => {
     patchFlow((f) => ({
       ...f,
@@ -180,13 +204,15 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
 
   const finishConnect = (toId: string) => {
     if (!connecting || connecting.from === toId) return;
-    const exists = flow?.edges.some((e) => e.from === connecting.from && e.to === toId);
+    const exists = flow?.edges.some(
+      (e) => e.from === connecting.from && e.to === toId && e.cond === connecting.cond,
+    );
     if (!exists)
       patchFlow((f) => ({
         ...f,
         edges: [
           ...f.edges,
-          { id: crypto.randomUUID(), from: connecting.from, to: toId, cond: "success" },
+          { id: crypto.randomUUID(), from: connecting.from, to: toId, cond: connecting.cond },
         ],
       }));
     setConnecting(null);
@@ -197,10 +223,13 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
     setRunning(true);
     setResults({});
     setVars({});
+    setLog([]);
+    setLogOpen(true);
     try {
       await runFlow(flow, collection, spec, envName, {
         onNode: (nodeId, state) => setResults((r) => ({ ...r, [nodeId]: state })),
         onVars: setVars,
+        onLog: (entry) => setLog((l) => [...l, entry]),
       });
     } finally {
       setRunning(false);
@@ -209,10 +238,12 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
 
   // ---------- render ----------
 
-  const nodeCenter = (n: FlowNode, side: "in" | "out") => ({
-    x: n.x + (side === "out" ? NODE_W : 0),
-    y: n.y + NODE_H / 2,
-  });
+  const nodeCenter = (n: FlowNode, side: "in" | "out", cond: EdgeCond = "always") => {
+    let dy = 0;
+    if (side === "out" && n.kind === "request")
+      dy = cond === "success" ? -12 : cond === "fail" ? 12 : 0;
+    return { x: n.x + (side === "out" ? NODE_W : 0), y: n.y + NODE_H / 2 + dy };
+  };
 
   const nodeCls = (n: FlowNode): string => {
     const r = results[n.id];
@@ -295,6 +326,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
               )}
             </Dropdown>
             <button className="btn-ghost" onClick={addDelayNode}>＋ delay</button>
+            <button className="btn-ghost" onClick={addLogNode}>＋ log</button>
             <span className="flow-hint">
               arraste do ponto ● para conectar · clique na aresta para mudar a condição
             </span>
@@ -349,7 +381,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
               const from = flow.nodes.find((n) => n.id === e.from);
               const to = flow.nodes.find((n) => n.id === e.to);
               if (!from || !to) return null;
-              const a = nodeCenter(from, "out");
+              const a = nodeCenter(from, "out", e.cond);
               const b = nodeCenter(to, "in");
               const onEdgeClick = (ev: React.MouseEvent) => {
                 ev.stopPropagation();
@@ -383,7 +415,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
             {connecting && (() => {
               const from = flow.nodes.find((n) => n.id === connecting.from);
               if (!from) return null;
-              const a = nodeCenter(from, "out");
+              const a = nodeCenter(from, "out", connecting.cond);
               return (
                 <path
                   d={edgePath(a.x, a.y, connecting.x, connecting.y)}
@@ -436,6 +468,25 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                       </span>
                     </>
                   )}
+                  {n.kind === "log" && (
+                    <span className="flow-name">
+                      📋{" "}
+                      <input
+                        className="flow-delay-inp flow-log-inp"
+                        placeholder="mensagem com {{vars}}"
+                        value={n.message ?? ""}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          patchFlow((f) => ({
+                            ...f,
+                            nodes: f.nodes.map((x) =>
+                              x.id === n.id ? { ...x, message: e.target.value } : x,
+                            ),
+                          }))
+                        }
+                      />
+                    </span>
+                  )}
                   {n.kind === "delay" && (
                     <span className="flow-name">
                       ⏱{" "}
@@ -464,14 +515,38 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
                   )}
                   {res?.skipped && <span className="flow-badge c-faint">pulado</span>}
                   {n.kind !== "start" && <span className="flow-port in" />}
-                  <span
-                    className="flow-port out"
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      const p = canvasPos(e);
-                      setConnecting({ from: n.id, x: p.x, y: p.y });
-                    }}
-                  />
+                  {n.kind === "request" ? (
+                    <>
+                      <span
+                        className="flow-port out ok"
+                        title="saída de sucesso"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          const p = canvasPos(e);
+                          setConnecting({ from: n.id, cond: "success", x: p.x, y: p.y });
+                        }}
+                      />
+                      <span
+                        className="flow-port out fail"
+                        title="saída de erro"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          const p = canvasPos(e);
+                          setConnecting({ from: n.id, cond: "fail", x: p.x, y: p.y });
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <span
+                      className="flow-port out"
+                      title="saída"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        const p = canvasPos(e);
+                        setConnecting({ from: n.id, cond: n.kind === "start" ? "always" : "always", x: p.x, y: p.y });
+                      }}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -479,6 +554,24 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
         </div>
       )}
 
+      {flow && log.length > 0 && (
+        <div className="flow-log">
+          <button className="flow-log-head" onClick={() => setLogOpen(!logOpen)}>
+            {logOpen ? "▾" : "▸"} log da execução ({log.length})
+          </button>
+          {logOpen && (
+            <div className="flow-log-body" ref={logRef}>
+              {log.map((l, i) => (
+                <div key={i} className={"flow-log-line " + l.kind}>
+                  <span className="flow-log-at">{l.at}</span>
+                  {l.kind === "print" && <span className="flow-log-tag">log</span>}
+                  <span className="flow-log-text">{l.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {flow && Object.keys(vars).length > 0 && (
         <div className="flow-vars">
           <span className="c-faint">variáveis extraídas:</span>

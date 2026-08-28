@@ -3,6 +3,7 @@ import { buildSendSpec, resolveBase, withBase } from "./spec";
 import { contractForHistory, evaluateContract } from "./contract";
 import { runChecks } from "./checks";
 import { getByPath } from "./jsonpath";
+import { interpolate } from "./interpolate";
 import {
   flattenRequests,
   slaBreached,
@@ -18,13 +19,15 @@ export type EdgeCond = "always" | "success" | "fail";
 
 export interface FlowNode {
   id: string;
-  kind: "start" | "request" | "delay";
+  kind: "start" | "request" | "delay" | "log";
   x: number;
   y: number;
   /** request node: id da request na collection */
   requestId?: string;
   /** delay node: espera em ms */
   delayMs?: number;
+  /** log node: mensagem impressa no painel ({{vars}} interpoladas) */
+  message?: string;
 }
 
 export interface FlowEdge {
@@ -68,10 +71,19 @@ export interface FlowRunState {
   vars: Record<string, string>;
 }
 
+export interface FlowLogEntry {
+  at: string; // HH:MM:SS
+  kind: "info" | "ok" | "err" | "print";
+  text: string;
+}
+
 interface RunCallbacks {
   onNode: (nodeId: string, state: NodeResult | "running") => void;
   onVars: (vars: Record<string, string>) => void;
+  onLog: (entry: FlowLogEntry) => void;
 }
+
+const now = () => new Date().toTimeString().slice(0, 8);
 
 /** roda uma request do fluxo com as vars de sessão acumuladas */
 async function runFlowRequest(
@@ -174,6 +186,7 @@ export async function runFlow(
 
   const start = flow.nodes.find((n) => n.kind === "start");
   if (!start) return;
+  cb.onLog({ at: now(), kind: "info", text: `fluxo "${flow.name}" · ambiente ${envName || "(nenhum)"}` });
 
   // fila sequencial: nó -> roda -> enfileira saídas compatíveis
   const queue: string[] = [start.id];
@@ -189,18 +202,35 @@ export async function runFlow(
       const target = node.requestId ? reqIndex.get(node.requestId) : undefined;
       if (!target) {
         cb.onNode(nodeId, { ok: false, problems: ["request não existe mais"], extracted: [] });
+        cb.onLog({ at: now(), kind: "err", text: "nó aponta para request que não existe mais" });
         outcome = "fail";
       } else {
         cb.onNode(nodeId, "running");
+        cb.onLog({ at: now(), kind: "info", text: `→ ${target.req.method} ${target.req.name}` });
         const result = await runFlowRequest(coll, target.folder, target.req, spec, envName, vars);
         for (const [k, v] of result.extracted) vars[k] = v;
         cb.onVars({ ...vars });
         cb.onNode(nodeId, result);
         outcome = result.ok ? "success" : "fail";
+        const head = `${target.req.method} ${target.req.name} · ${result.status ?? "?"} · ${result.totalMs ?? "?"}ms`;
+        if (result.ok) cb.onLog({ at: now(), kind: "ok", text: `✓ ${head}` });
+        else cb.onLog({ at: now(), kind: "err", text: `✗ ${head} — ${result.problems.join(" · ")}` });
+        for (const [k, v] of result.extracted)
+          cb.onLog({ at: now(), kind: "info", text: `  {{${k}}} = ${v.length > 60 ? v.slice(0, 60) + "…" : v}` });
       }
     } else if (node.kind === "delay") {
       cb.onNode(nodeId, "running");
+      cb.onLog({ at: now(), kind: "info", text: `⏱ aguardando ${node.delayMs ?? 1000}ms` });
       await new Promise((r) => setTimeout(r, node.delayMs ?? 1000));
+      cb.onNode(nodeId, { ok: true, problems: [], extracted: [] });
+    } else if (node.kind === "log") {
+      const baseEnv = coll.environments.find((e) => e.name === envName) ?? null;
+      const overlay = {
+        name: baseEnv?.name ?? "(fluxo)",
+        vars: [...(baseEnv?.vars ?? []), ...Object.entries(vars)] as [string, string][],
+      };
+      const msg = interpolate(node.message ?? "", withBase(overlay, resolveBase(coll, envName)) ?? overlay);
+      cb.onLog({ at: now(), kind: "print", text: msg || "(log vazio)" });
       cb.onNode(nodeId, { ok: true, problems: [], extracted: [] });
     }
 
@@ -220,4 +250,5 @@ export async function runFlow(
       }
     }
   }
+  cb.onLog({ at: now(), kind: "info", text: "fim do fluxo" });
 }
