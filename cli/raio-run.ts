@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { buildSendSpec, resolveBase, withBase } from "../src/lib/spec";
+import { setGlobalVars } from "../src/lib/globals";
 import { evaluateContract } from "../src/lib/contract";
 import { runChecks } from "../src/lib/checks";
 import { slaBreached, type Environment, type HttpResponseData, type RequestDef } from "../src/types";
@@ -38,6 +39,12 @@ const workspace = flag("workspace") ?? path.join(os.homedir(), "raio-collections
 const envName = flag("env") ?? "";
 
 // ---- carrega workspace ----
+// variáveis globais do workspace (globals.json): valem em todas as collections
+try {
+  setGlobalVars(JSON.parse(fs.readFileSync(path.join(workspace, "globals.json"), "utf8")));
+} catch {
+  /* sem globais */
+}
 const collDir = path.join(workspace, collectionName);
 if (!fs.existsSync(collDir)) fail(`collection "${collectionName}" não existe em ${workspace}`);
 

@@ -737,7 +737,9 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                             ? `${n.condLeft || "…"} ${condOpLabel(n.condOp)}${n.condOp === "exists" ? "" : " " + (n.condRight || "…")}`
                             : n.expr || "clique 2x para configurar")}
                         {n.kind === "setvar" &&
-                          (n.varName ? `{{${n.varName}}} = ${n.varValue || "…"}` : "clique 2x para configurar")}
+                          (n.varName
+                            ? `${n.varScope === "global" ? "🌐 " : ""}{{${n.varName}}} = ${n.varValue || "…"}`
+                            : "clique 2x para configurar")}
                         {n.kind === "log" && (n.message || "clique 2x para configurar")}
                         {n.kind === "delay" &&
                           ((n.delayMs ?? 1000) >= 1000

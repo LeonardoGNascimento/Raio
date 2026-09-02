@@ -4,6 +4,7 @@ import { contractForHistory, evaluateContract } from "./contract";
 import { runChecks } from "./checks";
 import { getByPath } from "./jsonpath";
 import { interpolate } from "./interpolate";
+import { getGlobalVars, setGlobalVars } from "./globals";
 import {
   flattenRequests,
   slaBreached,
@@ -37,6 +38,8 @@ export interface FlowNode {
   /** setvar node */
   varName?: string;
   varValue?: string;
+  /** setvar: "flow" (padrão) ou "global" — grava nas variáveis do workspace */
+  varScope?: "flow" | "global";
   /** request node: apelido para referenciar a response ({{ref.body.x}}) */
   ref?: string;
   /** request node: valores só deste fluxo — a request salva não muda */
@@ -584,9 +587,25 @@ export async function runFlow(
     if (node.kind === "setvar") {
       const name = (node.varName ?? "").trim();
       if (name) {
-        vars[name] = interpolate(node.varValue ?? "", envNow([node.varValue]));
+        const value = interpolate(node.varValue ?? "", envNow([node.varValue]));
+        vars[name] = value;
         cb.onVars({ ...vars });
-        cb.onLog({ at: now(), kind: "info", text: `✏ {{${name}}} = ${vars[name]}` });
+        if (node.varScope === "global") {
+          // grava no workspace: todas as collections passam a resolver {{name}}
+          const next: [string, string][] = [
+            ...getGlobalVars().filter(([k]) => k !== name),
+            [name, value],
+          ];
+          setGlobalVars(next);
+          try {
+            await api.saveGlobals(next);
+            cb.onLog({ at: now(), kind: "ok", text: `🌐 global {{${name}}} = ${value.length > 60 ? value.slice(0, 60) + "…" : value}` });
+          } catch (e) {
+            cb.onLog({ at: now(), kind: "err", text: `🌐 falha ao salvar global {{${name}}}: ${String(e)}` });
+          }
+        } else {
+          cb.onLog({ at: now(), kind: "info", text: `✏ {{${name}}} = ${value}` });
+        }
       }
       cb.onNode(node.id, { ok: true, problems: [], extracted: [] });
       return "success";

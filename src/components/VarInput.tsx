@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import type { Environment } from "../types";
 import { isGlobalVar } from "../lib/interpolate";
+import { getGlobalVar } from "../lib/globals";
 import {
   VarSuggestList,
   applySuggestion,
@@ -27,7 +28,7 @@ export function highlightVars(text: string, env: Environment | null): string {
     const name = m[1];
     const ok = name.startsWith("$")
       ? DYNAMIC.has(name)
-      : known.has(name) || isGlobalVar(name);
+      : known.has(name) || isGlobalVar(name) || getGlobalVar(name) !== undefined;
     out += `<span class="${ok ? "v-ok" : "v-miss"}">${escHtml(m[0])}</span>`;
     last = m.index + m[0].length;
   }

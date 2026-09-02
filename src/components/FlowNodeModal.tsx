@@ -31,6 +31,7 @@ export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: P
   const [right, setRight] = useState(node.condRight ?? "");
   const [varName, setVarName] = useState(node.varName ?? "");
   const [varValue, setVarValue] = useState(node.varValue ?? "");
+  const [varScope, setVarScope] = useState<"flow" | "global">(node.varScope ?? "flow");
   const [message, setMessage] = useState(node.message ?? "");
   const [delayMs, setDelayMs] = useState(node.delayMs ?? 1000);
   const [ovBody, setOvBody] = useState(node.overrides?.body ?? "");
@@ -40,7 +41,7 @@ export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: P
 
   const save = () => {
     if (node.kind === "cond") onSave({ condLeft: left, condOp: op, condRight: right, expr: undefined });
-    if (node.kind === "setvar") onSave({ varName, varValue });
+    if (node.kind === "setvar") onSave({ varName, varValue, varScope });
     if (node.kind === "log") onSave({ message });
     if (node.kind === "delay") onSave({ delayMs });
     if (node.kind === "request") {
@@ -158,11 +159,21 @@ export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: P
             extraSuggestions={nodeSuggestions}
             className="inp"
             style={inputStyle}
-            placeholder="{{global.uuid}}"
+            placeholder="{{login.body.token}}"
             value={varValue}
             env={env}
             onChange={setVarValue}
           />
+          <div className="field-label" style={{ marginTop: 14 }}>onde vale</div>
+          <select
+            className="inp"
+            style={inputStyle}
+            value={varScope}
+            onChange={(e) => setVarScope(e.target.value as "flow" | "global")}
+          >
+            <option value="flow">só neste fluxo (some quando termina)</option>
+            <option value="global">🌐 global — todas as collections, fica salva</option>
+          </select>
         </>
       )}
 

@@ -1,5 +1,6 @@
 import type { Environment } from "../types";
 import { GLOBAL_VAR_NAMES } from "../lib/interpolate";
+import { getGlobalVars } from "../lib/globals";
 
 const DYNAMIC_NAMES = ["$uuid", "$timestamp", "$isodate", "$random"];
 
@@ -36,8 +37,14 @@ export function varSuggestions(
   extra: Suggestion[] = [],
 ): Suggestion[] {
   const q = prefix.toLowerCase();
+  const wsGlobals: Suggestion[] = getGlobalVars().map(([name, value]) => ({
+    name,
+    hint: "🌐 " + (value.length > 24 ? value.slice(0, 24) + "…" : value),
+    kind: "env" as const,
+  }));
   const all: Suggestion[] = [
     ...extra,
+    ...wsGlobals,
     ...(env?.vars ?? []).map(
       ([name, value]): Suggestion => ({
         name,

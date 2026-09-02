@@ -39,6 +39,8 @@ pub fn run() {
             workspace::delete_snapshot,
             workspace::load_history,
             workspace::append_history,
+            workspace::load_globals,
+            workspace::save_globals,
             workspace::load_flows,
             workspace::save_flows,
             workspace::save_openapi,

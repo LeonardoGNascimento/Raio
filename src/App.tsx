@@ -26,6 +26,8 @@ import { ResponseViewer } from "./components/ResponseViewer";
 import { DiffView, type DiffResult } from "./components/DiffView";
 import { Dropdown } from "./components/Dropdown";
 import { EnvModal } from "./components/EnvModal";
+import { GlobalsModal } from "./components/GlobalsModal";
+import { setGlobalVars } from "./lib/globals";
 import { CurlModal } from "./components/CurlModal";
 import { OpenApiModal } from "./components/OpenApiModal";
 import { ExportModal } from "./components/ExportModal";
@@ -51,7 +53,7 @@ import { Symbol } from "./components/Logo";
 import "./App.css";
 
 type SpecJson = Record<string, unknown>;
-type ModalKind = "env" | "curl" | "openapi" | "export" | "theme" | "import" | "cookies" | null;
+type ModalKind = "env" | "globals" | "curl" | "openapi" | "export" | "theme" | "import" | "cookies" | null;
 
 interface ActiveReq {
   collection: string;
@@ -214,6 +216,8 @@ export default function App() {
   const reload = useCallback(async () => {
     try {
       const data = await api.getWorkspace();
+      // globais do workspace: resolvidas pelo interpolate em qualquer contexto
+      api.loadGlobals().then(setGlobalVars).catch(() => {});
       setWs(data);
       return data;
     } catch (e) {
@@ -1143,6 +1147,9 @@ export default function App() {
               </>
             )}
           </Dropdown>
+          <button className="icon-sq" title="variáveis globais (todas as collections)" onClick={() => setModal("globals")}>
+            🌐
+          </button>
           <button className="icon-sq" title="gerenciar ambientes" onClick={() => setModal("env")}>
             ⋯
           </button>
@@ -1244,6 +1251,9 @@ export default function App() {
         )}
       </main>
 
+      {modal === "globals" && (
+        <GlobalsModal onClose={() => setModal(null)} onSaved={() => reload()} />
+      )}
       {modal === "env" && curColl && (
         <EnvModal
           collection={curColl}

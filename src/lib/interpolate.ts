@@ -1,4 +1,5 @@
 import type { Environment } from "../types";
+import { getGlobalVar } from "./globals";
 
 /** Variáveis dinâmicas geradas no momento do envio. */
 function dynamicVar(name: string): string | null {
@@ -79,7 +80,9 @@ export function interpolate(text: string, env: Environment | null): string {
   return text.replace(VAR_RE, (full, name: string) => {
     if (name.startsWith("$")) return dynamicVar(name) ?? full;
     const val = map.get(name);
-    if (val !== undefined) return val; // ambiente vence uma global de mesmo nome
+    if (val !== undefined) return val; // ambiente vence global de mesmo nome
+    const ws = getGlobalVar(name); // global do workspace (todas as collections)
+    if (ws !== undefined) return ws;
     const gen = GLOBALS[name];
     return gen ? gen() : full;
   });
@@ -95,7 +98,8 @@ export function missingVars(text: string, env: Environment | null): string[] {
       if (dynamicVar(name) === null) found.add(name); // dinâmica desconhecida
       continue;
     }
-    if (!known.has(name) && !(name in GLOBALS)) found.add(name);
+    if (!known.has(name) && !(name in GLOBALS) && getGlobalVar(name) === undefined)
+      found.add(name);
   }
   return [...found];
 }

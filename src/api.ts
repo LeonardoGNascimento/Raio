@@ -89,6 +89,8 @@ export const api = {
     requestName: string,
     entry: HistoryEntry,
   ) => invoke<HistoryEntry[]>("append_history", { collection, folder, requestName, entry }),
+  loadGlobals: () => invoke<[string, string][]>("load_globals"),
+  saveGlobals: (vars: [string, string][]) => invoke<void>("save_globals", { vars }),
   loadFlows: (collection: string) => invoke<unknown>("load_flows", { collection }),
   saveFlows: (collection: string, flows: unknown) =>
     invoke<void>("save_flows", { collection, flows }),

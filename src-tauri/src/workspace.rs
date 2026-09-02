@@ -671,6 +671,26 @@ pub fn append_history(
     Ok(hist)
 }
 
+// ---------- Variáveis globais do workspace ----------
+
+#[tauri::command]
+pub fn load_globals() -> Result<Vec<(String, String)>, String> {
+    let ws = workspace_dir()?;
+    let path = ws.join("globals.json");
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&raw).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_globals(vars: Vec<(String, String)>) -> Result<(), String> {
+    let ws = workspace_dir()?;
+    let raw = serde_json::to_string_pretty(&vars).map_err(|e| e.to_string())?;
+    fs::write(ws.join("globals.json"), raw).map_err(|e| e.to_string())
+}
+
 // ---------- Fluxos (canvas) ----------
 
 fn flows_path(ws: &Path, collection: &str) -> PathBuf {
