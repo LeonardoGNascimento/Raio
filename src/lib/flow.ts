@@ -39,6 +39,56 @@ export interface FlowNode {
   varValue?: string;
   /** request node: apelido para referenciar a response ({{ref.body.x}}) */
   ref?: string;
+  /** request node: valores só deste fluxo — a request salva não muda */
+  overrides?: NodeOverrides;
+}
+
+export interface NodeOverrides {
+  /** substitui o body quando não vazio */
+  body?: string;
+  /** mescla por chave (mesma chave substitui, nova adiciona) */
+  headers?: [string, string][];
+  query?: [string, string][];
+  path_params?: [string, string][];
+}
+
+/** true se o override tem algum valor de fato */
+export function hasOverrides(o?: NodeOverrides): boolean {
+  if (!o) return false;
+  return (
+    !!o.body?.trim() ||
+    (o.headers ?? []).some(([k]) => k.trim()) ||
+    (o.query ?? []).some(([k]) => k.trim()) ||
+    (o.path_params ?? []).some(([k]) => k.trim())
+  );
+}
+
+function mergeKV(
+  base: [string, string][] | undefined,
+  extra: [string, string][] | undefined,
+): [string, string][] {
+  const out = [...(base ?? [])];
+  for (const [k, v] of extra ?? []) {
+    if (!k.trim()) continue;
+    const i = out.findIndex(([bk]) => bk.toLowerCase() === k.toLowerCase());
+    if (i >= 0) out[i] = [out[i][0], v];
+    else out.push([k, v]);
+  }
+  return out;
+}
+
+/** aplica os valores do fluxo por cima da request, sem tocar na original */
+export function applyOverrides(req: RequestDef, o?: NodeOverrides): RequestDef {
+  if (!hasOverrides(o)) return req;
+  const body = o!.body?.trim() ? o!.body! : req.body;
+  return {
+    ...req,
+    body,
+    body_type: o!.body?.trim() && req.body_type === "none" ? "json" : req.body_type,
+    headers: mergeKV(req.headers, o!.headers),
+    query: mergeKV(req.query, o!.query),
+    path_params: mergeKV(req.path_params, o!.path_params),
+  };
 }
 
 /** slug para referenciar um nó: "Criar Pedido (v2)" → "criar-pedido-v2" */
@@ -467,11 +517,15 @@ export async function runFlow(
         return "fail";
       }
       cb.onNode(node.id, "running");
-      cb.onLog({ at: now(), kind: "info", text: `→ ${target.req.method} ${target.req.name}` });
-      const tokenVars = Object.fromEntries(
-        nodeTokenVars([JSON.stringify(target.req)], outputs),
-      );
-      const result = await runFlowRequest(coll, target.folder, target.req, spec, envName, {
+      const effReq = applyOverrides(target.req, node.overrides);
+      const overridden = effReq !== target.req;
+      cb.onLog({
+        at: now(),
+        kind: "info",
+        text: `→ ${target.req.method} ${target.req.name}${overridden ? " · com valores do fluxo" : ""}`,
+      });
+      const tokenVars = Object.fromEntries(nodeTokenVars([JSON.stringify(effReq)], outputs));
+      const result = await runFlowRequest(coll, target.folder, effReq, spec, envName, {
         ...vars,
         ...tokenVars,
       });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { condOpLabel, DUAL_PORT_KINDS, responseSuggestions, runFlow, newFlow, slugRef, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
+import { condOpLabel, DUAL_PORT_KINDS, hasOverrides, responseSuggestions, runFlow, newFlow, slugRef, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
 import type { Suggestion } from "./VarSuggest";
 import { FlowNodeModal } from "./FlowNodeModal";
 import { Modal } from "./Modal";
@@ -627,6 +627,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                     {(typeof results[node.id] === "object" || flow.saved?.[node.id]?.body !== undefined) &&
                       item("👁 ver response", () => setRespNode(node.id))}
                     {item("▶ rodar daqui", () => runFromNode(node.id))}
+                    {item("⚙ envio neste fluxo", () => setCfgNode(node.id))}
                   </>
                 )}
                 {node && node.kind !== "request" && item("✎ editar", () => setCfgNode(node.id))}
@@ -715,6 +716,9 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                           title={"use {{" + (n.ref ?? (target ? slugRef(target.req.name) : "")) + ".body.…}} nos próximos nós"}
                         >
                           #{n.ref ?? (target ? slugRef(target.req.name) : "?")}
+                          {hasOverrides(n.overrides) && (
+                            <span className="c-accent" title="tem body/params próprios deste fluxo"> · ✎ fluxo</span>
+                          )}
                         </span>
                       </span>
                     </>
@@ -742,10 +746,10 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                       </span>
                     </span>
                   )}
-                  {n.kind !== "start" && n.kind !== "request" && (
+                  {n.kind !== "start" && (
                     <button
                       className="flow-gear"
-                      title="configurar"
+                      title={n.kind === "request" ? "envio neste fluxo (body/headers/params)" : "configurar"}
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={() => setCfgNode(n.id)}
                     >

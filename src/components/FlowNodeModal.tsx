@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { VarInput } from "./VarInput";
-import { COND_OPS, type FlowNode } from "../lib/flow";
+import { CodeArea } from "./CodeArea";
+import { highlightJson } from "../lib/format";
+import { handleCodeEditorKeys } from "../lib/codeEditor";
+import { COND_OPS, type FlowNode, type NodeOverrides } from "../lib/flow";
 import type { Environment } from "../types";
 import type { Suggestion } from "./VarSuggest";
 
@@ -19,6 +22,7 @@ const TITLES: Record<string, string> = {
   setvar: "Configurar variável",
   log: "Configurar log",
   delay: "Configurar espera",
+  request: "Envio neste fluxo",
 };
 
 export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: Props) {
@@ -29,14 +33,64 @@ export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: P
   const [varValue, setVarValue] = useState(node.varValue ?? "");
   const [message, setMessage] = useState(node.message ?? "");
   const [delayMs, setDelayMs] = useState(node.delayMs ?? 1000);
+  const [ovBody, setOvBody] = useState(node.overrides?.body ?? "");
+  const [ovHeaders, setOvHeaders] = useState<[string, string][]>(node.overrides?.headers ?? []);
+  const [ovQuery, setOvQuery] = useState<[string, string][]>(node.overrides?.query ?? []);
+  const [ovPath, setOvPath] = useState<[string, string][]>(node.overrides?.path_params ?? []);
 
   const save = () => {
     if (node.kind === "cond") onSave({ condLeft: left, condOp: op, condRight: right, expr: undefined });
     if (node.kind === "setvar") onSave({ varName, varValue });
     if (node.kind === "log") onSave({ message });
     if (node.kind === "delay") onSave({ delayMs });
+    if (node.kind === "request") {
+      const clean = (rows: [string, string][]) => rows.filter(([k]) => k.trim());
+      const overrides: NodeOverrides = {
+        body: ovBody.trim() ? ovBody : undefined,
+        headers: clean(ovHeaders),
+        query: clean(ovQuery),
+        path_params: clean(ovPath),
+      };
+      onSave({ overrides });
+    }
     onClose();
   };
+
+  const kvRows = (
+    rows: [string, string][],
+    setRows: (r: [string, string][]) => void,
+    keyPh: string,
+    valPh: string,
+  ) => (
+    <>
+      {rows.map(([k, v], i) => (
+        <div key={i} className="hdr-row">
+          <input
+            className="inp key"
+            style={{ flex: "0 0 150px" }}
+            placeholder={keyPh}
+            value={k}
+            spellCheck={false}
+            onChange={(e) => setRows(rows.map((r, idx) => (idx === i ? [e.target.value, v] : r)))}
+          />
+          <VarInput
+            extraSuggestions={nodeSuggestions}
+            className="inp val"
+            placeholder={valPh}
+            value={v}
+            env={env}
+            onChange={(nv) => setRows(rows.map((r, idx) => (idx === i ? [k, nv] : r)))}
+          />
+          <button className="btn-icon danger" onClick={() => setRows(rows.filter((_, idx) => idx !== i))}>
+            ×
+          </button>
+        </div>
+      ))}
+      <button className="link-btn" onClick={() => setRows([...rows, ["", ""]])}>
+        + adicionar
+      </button>
+    </>
+  );
 
   const inputStyle = { width: "100%", padding: "10px 12px", fontSize: 13 };
 
@@ -128,6 +182,35 @@ export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: P
             env={env}
             onChange={setMessage}
           />
+        </>
+      )}
+
+      {node.kind === "request" && (
+        <>
+          <div className="modal-hint">
+            Estes valores valem <b>só neste fluxo</b> — a request original não muda. Body
+            preenchido substitui o da request; headers, query e path params são mesclados por
+            cima (mesma chave substitui). Aceita <span className="mono">{"{{variáveis}}"}</span>{" "}
+            e <span className="mono">{"{{ref.body.…}}"}</span> de nós anteriores.
+          </div>
+          <div className="field-label">body (vazio = usa o da request)</div>
+          <div className="flow-ov-body">
+            <CodeArea
+              value={ovBody}
+              placeholder='{ "chave": "{{criar.body.id}}" }'
+              highlight={highlightJson}
+              onChange={setOvBody}
+              onKeyDown={(e) => handleCodeEditorKeys(e, setOvBody)}
+              env={env}
+              extraSuggestions={nodeSuggestions}
+            />
+          </div>
+          <div className="field-label" style={{ marginTop: 14 }}>headers</div>
+          {kvRows(ovHeaders, setOvHeaders, "X-Meu-Header", "valor")}
+          <div className="field-label" style={{ marginTop: 14 }}>query params</div>
+          {kvRows(ovQuery, setOvQuery, "param", "valor")}
+          <div className="field-label" style={{ marginTop: 14 }}>path params</div>
+          {kvRows(ovPath, setOvPath, "id", "valor")}
         </>
       )}
 
