@@ -1150,20 +1150,33 @@ export default function App() {
         </div>
 
         {flowsColl && ws.collections.some((c) => c.name === flowsColl) ? (
-          <FlowView
-            key={flowsColl}
-            collection={ws.collections.find((c) => c.name === flowsColl)!}
-            spec={specs[flowsColl] ?? null}
-            envName={envName}
-            onOpenRequest={(_folder, requestId) => {
-              const coll = ws.collections.find((c) => c.name === flowsColl)!;
-              const hit = flattenRequests(coll).find(({ req }) => req.id === requestId);
-              if (hit) {
-                setFlowsColl(null);
-                focusRequest(flowsColl, hit.folder, hit.req);
-              }
-            }}
-          />
+          <div className="main-col">
+            <div className="view-tabs">
+              <button
+                className="view-tab"
+                disabled={!active}
+                title={active ? "voltar para a request aberta" : "nenhuma request aberta"}
+                onClick={() => setFlowsColl(null)}
+              >
+                ⚡ request
+              </button>
+              <button className="view-tab active">⛓ fluxos · {flowsColl}</button>
+            </div>
+            <FlowView
+              key={flowsColl}
+              collection={ws.collections.find((c) => c.name === flowsColl)!}
+              spec={specs[flowsColl] ?? null}
+              envName={envName}
+              onOpenRequest={(_folder, requestId) => {
+                const coll = ws.collections.find((c) => c.name === flowsColl)!;
+                const hit = flattenRequests(coll).find(({ req }) => req.id === requestId);
+                if (hit) {
+                  setFlowsColl(null);
+                  focusRequest(flowsColl, hit.folder, hit.req);
+                }
+              }}
+            />
+          </div>
         ) : dashboard && ws.collections.some((c) => c.name === dashboard) ? (
           <DashboardView
             key={dashboard}
@@ -1175,6 +1188,21 @@ export default function App() {
             onClose={() => setDashboard(null)}
           />
         ) : active ? (
+          <div className="main-col">
+            <div className="view-tabs">
+              <button className="view-tab active">⚡ request</button>
+              <button
+                className="view-tab"
+                title={"fluxos de " + active.collection}
+                onClick={() => {
+                  ensureSpec(active.collection);
+                  setDashboard(null);
+                  setFlowsColl(active.collection);
+                }}
+              >
+                ⛓ fluxos
+              </button>
+            </div>
           <div className="split">
             <RequestEditor
               crumb={active.collection + (active.folder ? " / " + active.folder : "")}
@@ -1229,6 +1257,7 @@ export default function App() {
                 onDeleteSnapshot={() => setSnapshotAsk(true)}
               />
             )}
+          </div>
           </div>
         ) : (
           <div className="resp-center" style={{ flex: 1 }}>
