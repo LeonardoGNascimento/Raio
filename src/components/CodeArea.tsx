@@ -20,10 +20,12 @@ interface Props {
   /** habilita editar {{var}} sob o mouse direto no ambiente da collection */
   env?: Environment | null;
   onSaveVar?: (name: string, value: string) => void;
+  /** sugestões extras no autocomplete */
+  extraSuggestions?: Suggestion[];
 }
 
 /** Textarea com camada de syntax highlight atrás (texto transparente + caret visível). */
-export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, env, onSaveVar }: Props) {
+export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, env, onSaveVar, extraSuggestions }: Props) {
   const preRef = useRef<HTMLPreElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const closeTimer = useRef<number | null>(null);
@@ -34,7 +36,7 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
     if (env === undefined) return; // sem env: campo não usa variáveis
     const caret = ta.selectionStart ?? ta.value.length;
     const open = caret === (ta.selectionEnd ?? caret) ? openVarAt(ta.value, caret) : null;
-    const items = open ? varSuggestions(open.prefix, env ?? null) : [];
+    const items = open ? varSuggestions(open.prefix, env ?? null, extraSuggestions ?? []) : [];
     if (!open || items.length === 0) {
       setSug(null);
       return;

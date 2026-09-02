@@ -37,6 +37,20 @@ export interface FlowNode {
   /** setvar node */
   varName?: string;
   varValue?: string;
+  /** request node: apelido para referenciar a response ({{ref.body.x}}) */
+  ref?: string;
+}
+
+/** slug para referenciar um nó: "Criar Pedido (v2)" → "criar-pedido-v2" */
+export function slugRef(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "no"
+  );
 }
 
 export const COND_OPS: [string, string][] = [
@@ -123,6 +137,106 @@ export interface FlowLogEntry {
   at: string; // HH:MM:SS
   kind: "info" | "ok" | "err" | "print";
   text: string;
+}
+
+/** response de um nó, endereçável pelos próximos como {{ref.status}} / {{ref.body.path}} */
+interface NodeOutput {
+  status?: number;
+  totalMs?: number;
+  raw: string;
+  parsed: unknown;
+}
+
+const TOKEN_RE = /\{\{\s*([\w.-]+)\s*\}\}/g;
+
+/** resolve tokens {{ref.status|ms|body[.path]}} contra as responses já produzidas */
+export function nodeTokenVars(
+  texts: (string | undefined)[],
+  outputs: Record<string, NodeOutput>,
+): [string, string][] {
+  const found = new Map<string, string>();
+  for (const text of texts) {
+    if (!text) continue;
+    for (const m of text.matchAll(TOKEN_RE)) {
+      const name = m[1];
+      if (found.has(name)) continue;
+      const [head, field, ...rest] = name.split(".");
+      const out = outputs[head];
+      if (!out || !field) continue;
+      let v: unknown;
+      if (field === "status") v = out.status;
+      else if (field === "ms") v = out.totalMs;
+      else if (field === "body")
+        v = rest.length === 0 ? out.raw : getByPath(out.parsed, rest.join("."));
+      else continue;
+      if (v === undefined || v === null) continue;
+      found.set(name, typeof v === "object" ? JSON.stringify(v) : String(v));
+    }
+  }
+  return [...found];
+}
+
+/** rótulo de tipo para o autocomplete: "number · 42", "array(3)", "string · \"abc\"" */
+function typeHint(v: unknown): string {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return `array(${v.length})`;
+  switch (typeof v) {
+    case "object": return "object";
+    case "string": return `string · "${v.length > 22 ? v.slice(0, 22) + "…" : v}"`;
+    case "number": return `number · ${v}`;
+    case "boolean": return `boolean · ${v}`;
+    default: return typeof v;
+  }
+}
+
+export interface NodeHint {
+  name: string;
+  hint: string;
+}
+
+/** sugestões {{ref.*}} com tipos reais, a partir dos passos salvos do fluxo */
+export function responseSuggestions(flow: Flow, coll: Collection): NodeHint[] {
+  const reqIndex = new Map(flattenRequests(coll).map(({ req }) => [req.id, req]));
+  const out: NodeHint[] = [];
+  for (const n of flow.nodes) {
+    if (n.kind !== "request") continue;
+    const req = n.requestId ? reqIndex.get(n.requestId) : undefined;
+    const ref = n.ref ?? (req ? slugRef(req.name) : "no-" + n.id.slice(0, 4));
+    const sv = flow.saved?.[n.id];
+    if (!sv || sv.body === undefined) continue;
+    out.push({ name: `${ref}.status`, hint: `status · ${sv.status ?? "?"}` });
+    out.push({ name: `${ref}.ms`, hint: `tempo · ${sv.totalMs ?? "?"}ms` });
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sv.body);
+    } catch {
+      out.push({ name: `${ref}.body`, hint: "texto" });
+      continue;
+    }
+    out.push({ name: `${ref}.body`, hint: typeHint(parsed) });
+    let count = 0;
+    const walk = (v: unknown, path: string, depth: number) => {
+      if (count >= 60 || depth > 4 || v === null || typeof v !== "object") return;
+      if (Array.isArray(v)) {
+        out.push({ name: `${path}.length`, hint: `number · ${v.length}` });
+        count++;
+        if (v.length > 0) {
+          out.push({ name: `${path}.0`, hint: typeHint(v[0]) });
+          count++;
+          walk(v[0], `${path}.0`, depth + 1);
+        }
+        return;
+      }
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        if (count >= 60) return;
+        out.push({ name: `${path}.${k}`, hint: typeHint(val) });
+        count++;
+        walk(val, `${path}.${k}`, depth + 1);
+      }
+    };
+    walk(parsed, `${ref}.body`, 1);
+  }
+  return out;
 }
 
 interface RunCallbacks {
@@ -272,6 +386,33 @@ export async function runFlow(
   const saved: Record<string, SavedOutput> = {};
   const meta: Record<string, { status?: number; totalMs?: number; body?: string }> = {};
 
+  const refOf = (n: FlowNode): string => {
+    if (n.ref) return n.ref;
+    const target = n.requestId ? reqIndex.get(n.requestId) : undefined;
+    return target ? slugRef(target.req.name) : "no-" + n.id.slice(0, 4);
+  };
+
+  // responses endereçáveis por {{ref.*}}; passos salvos entram como semente
+  const outputs: Record<string, NodeOutput> = {};
+  const parseBody = (raw: string): unknown => {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  };
+  for (const n of flow.nodes) {
+    if (n.kind !== "request") continue;
+    const sv = flow.saved?.[n.id];
+    if (sv?.body !== undefined)
+      outputs[refOf(n)] = {
+        status: sv.status,
+        totalMs: sv.totalMs,
+        raw: sv.body,
+        parsed: parseBody(sv.body),
+      };
+  }
+
   const start = opts.startId
     ? flow.nodes.find((n) => n.id === opts.startId)
     : flow.nodes.find((n) => n.kind === "start");
@@ -289,11 +430,15 @@ export async function runFlow(
   }
 
   /** ambiente + vars acumuladas, para interpolar mensagens/condições */
-  const envNow = () => {
+  const envNow = (texts: (string | undefined)[] = []) => {
     const baseEnv = coll.environments.find((e) => e.name === envName) ?? null;
     const overlay: Environment = {
       name: baseEnv?.name ?? "(fluxo)",
-      vars: [...(baseEnv?.vars ?? []), ...Object.entries(vars)] as [string, string][],
+      vars: [
+        ...(baseEnv?.vars ?? []),
+        ...Object.entries(vars),
+        ...nodeTokenVars(texts, outputs),
+      ] as [string, string][],
     };
     return withBase(overlay, resolveBase(coll, envName)) ?? overlay;
   };
@@ -309,11 +454,23 @@ export async function runFlow(
       }
       cb.onNode(node.id, "running");
       cb.onLog({ at: now(), kind: "info", text: `→ ${target.req.method} ${target.req.name}` });
-      const result = await runFlowRequest(coll, target.folder, target.req, spec, envName, vars);
+      const tokenVars = Object.fromEntries(
+        nodeTokenVars([JSON.stringify(target.req)], outputs),
+      );
+      const result = await runFlowRequest(coll, target.folder, target.req, spec, envName, {
+        ...vars,
+        ...tokenVars,
+      });
       for (const [k, v] of result.extracted) vars[k] = v;
       cb.onVars({ ...vars });
       cb.onNode(node.id, result);
       meta[node.id] = { status: result.status, totalMs: result.totalMs, body: result.body };
+      outputs[refOf(node)] = {
+        status: result.status,
+        totalMs: result.totalMs,
+        raw: result.body ?? "",
+        parsed: result.body !== undefined ? parseBody(result.body) : undefined,
+      };
       const head = `${target.req.method} ${target.req.name} · ${result.status ?? "?"} · ${result.totalMs ?? "?"}ms`;
       if (result.ok) cb.onLog({ at: now(), kind: "ok", text: `✓ ${head}` });
       else cb.onLog({ at: now(), kind: "err", text: `✗ ${head} — ${result.problems.join(" · ")}` });
@@ -329,13 +486,13 @@ export async function runFlow(
       return "success";
     }
     if (node.kind === "log") {
-      const msg = interpolate(node.message ?? "", envNow());
+      const msg = interpolate(node.message ?? "", envNow([node.message]));
       cb.onLog({ at: now(), kind: "print", text: msg || "(log vazio)" });
       cb.onNode(node.id, { ok: true, problems: [], extracted: [] });
       return "success";
     }
     if (node.kind === "cond") {
-      const env = envNow();
+      const env = envNow([node.condLeft, node.condRight, node.expr]);
       let pass: boolean;
       let shown: string;
       if (node.condOp) {
@@ -359,7 +516,7 @@ export async function runFlow(
     if (node.kind === "setvar") {
       const name = (node.varName ?? "").trim();
       if (name) {
-        vars[name] = interpolate(node.varValue ?? "", envNow());
+        vars[name] = interpolate(node.varValue ?? "", envNow([node.varValue]));
         cb.onVars({ ...vars });
         cb.onLog({ at: now(), kind: "info", text: `✏ {{${name}}} = ${vars[name]}` });
       }

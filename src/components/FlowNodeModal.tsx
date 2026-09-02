@@ -3,10 +3,13 @@ import { Modal } from "./Modal";
 import { VarInput } from "./VarInput";
 import { COND_OPS, type FlowNode } from "../lib/flow";
 import type { Environment } from "../types";
+import type { Suggestion } from "./VarSuggest";
 
 interface Props {
   node: FlowNode;
   env: Environment | null;
+  /** sugestões {{ref.*}} das responses dos nós do fluxo */
+  nodeSuggestions?: Suggestion[];
   onSave: (patch: Partial<FlowNode>) => void;
   onClose: () => void;
 }
@@ -18,7 +21,7 @@ const TITLES: Record<string, string> = {
   delay: "Configurar espera",
 };
 
-export function FlowNodeModal({ node, env, onSave, onClose }: Props) {
+export function FlowNodeModal({ node, env, nodeSuggestions, onSave, onClose }: Props) {
   const [left, setLeft] = useState(node.condLeft ?? "");
   const [op, setOp] = useState(node.condOp ?? "==");
   const [right, setRight] = useState(node.condRight ?? "");
@@ -49,6 +52,7 @@ export function FlowNodeModal({ node, env, onSave, onClose }: Props) {
           </div>
           <div className="field-label">valor a testar</div>
           <VarInput
+            extraSuggestions={nodeSuggestions}
             className="inp"
             style={inputStyle}
             placeholder="{{id}}"
@@ -66,6 +70,7 @@ export function FlowNodeModal({ node, env, onSave, onClose }: Props) {
             <>
               <div className="field-label" style={{ marginTop: 14 }}>comparar com</div>
               <VarInput
+            extraSuggestions={nodeSuggestions}
                 className="inp"
                 style={inputStyle}
                 placeholder="10"
@@ -96,6 +101,7 @@ export function FlowNodeModal({ node, env, onSave, onClose }: Props) {
           />
           <div className="field-label" style={{ marginTop: 14 }}>valor</div>
           <VarInput
+            extraSuggestions={nodeSuggestions}
             className="inp"
             style={inputStyle}
             placeholder="{{global.uuid}}"
@@ -114,6 +120,7 @@ export function FlowNodeModal({ node, env, onSave, onClose }: Props) {
           </div>
           <div className="field-label">mensagem</div>
           <VarInput
+            extraSuggestions={nodeSuggestions}
             className="inp"
             style={inputStyle}
             placeholder="pedido criado com id {{id}}"

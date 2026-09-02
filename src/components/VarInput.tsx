@@ -138,10 +138,12 @@ interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" |
   onChange: (value: string) => void;
   /** habilita editar a variável sob o mouse direto no ambiente da collection */
   onSaveVar?: (name: string, value: string) => void;
+  /** sugestões extras no autocomplete (ex.: responses de nós do fluxo) */
+  extraSuggestions?: Suggestion[];
 }
 
 /** Input de linha única com {{variáveis}} destacadas (overlay atrás do texto). */
-export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }: Props) {
+export function VarInput({ value, env, onChange, onSaveVar, extraSuggestions, className, ...rest }: Props) {
   const underRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const closeTimer = useRef<number | null>(null);
@@ -151,7 +153,7 @@ export function VarInput({ value, env, onChange, onSaveVar, className, ...rest }
   const refreshSug = (el: HTMLInputElement) => {
     const caret = el.selectionStart ?? el.value.length;
     const open = caret === (el.selectionEnd ?? caret) ? openVarAt(el.value, caret) : null;
-    const items = open ? varSuggestions(open.prefix, env) : [];
+    const items = open ? varSuggestions(open.prefix, env, extraSuggestions ?? []) : [];
     if (!open || items.length === 0) {
       setSug(null);
       return;

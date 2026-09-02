@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { condOpLabel, DUAL_PORT_KINDS, runFlow, newFlow, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
+import { condOpLabel, DUAL_PORT_KINDS, responseSuggestions, runFlow, newFlow, slugRef, type EdgeCond, type Flow, type FlowLogEntry, type FlowNode, type NodeResult } from "../lib/flow";
+import type { Suggestion } from "./VarSuggest";
 import { FlowNodeModal } from "./FlowNodeModal";
 import { Modal } from "./Modal";
 import { JsonTree } from "./JsonTree";
@@ -79,6 +80,16 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const flow = flows.find((f) => f.id === flowId) ?? null;
+  const nodeSuggestions = useMemo<Suggestion[]>(() => {
+    if (!flow) return [];
+    return responseSuggestions(flow, collection).map((h) => ({
+      name: h.name,
+      hint: h.hint,
+      kind: "node" as const,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow?.saved, flow?.nodes, collection]);
+
   const modalEnv = useMemo(() => {
     const base = collection.environments.find((e) => e.name === envName) ?? null;
     return withBase(base, resolveBase(collection, envName));
@@ -129,6 +140,11 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
 
   const addRequestNode = (requestId: string) => {
     const off = flow ? flow.nodes.length * 30 : 0;
+    const reqName = reqById.get(requestId)?.req.name ?? "no";
+    const base = slugRef(reqName);
+    const used = new Set(flow?.nodes.map((n) => n.ref).filter(Boolean));
+    let ref = base;
+    for (let i = 2; used.has(ref); i++) ref = base + "-" + i;
     patchFlow((f) => ({
       ...f,
       nodes: [
@@ -137,6 +153,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
           id: crypto.randomUUID(),
           kind: "request",
           requestId,
+          ref,
           x: 300 + off - pan.x,
           y: 120 + off - pan.y,
         },
@@ -610,8 +627,16 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                       <span className={"flow-method " + (target ? METHOD_CLASS[target.req.method] ?? "c-dim" : "c-err")}>
                         {target?.req.method ?? "?"}
                       </span>
-                      <span className="flow-name">
-                        {target ? target.req.name : "request removida"}
+                      <span className="flow-summary">
+                        <span className="flow-name">
+                          {target ? target.req.name : "request removida"}
+                        </span>
+                        <span
+                          className="flow-sub"
+                          title={"use {{" + (n.ref ?? (target ? slugRef(target.req.name) : "")) + ".body.…}} nos próximos nós"}
+                        >
+                          #{n.ref ?? (target ? slugRef(target.req.name) : "?")}
+                        </span>
                       </span>
                     </>
                   )}
@@ -776,6 +801,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
           <FlowNodeModal
             node={node}
             env={modalEnv}
+            nodeSuggestions={nodeSuggestions}
             onClose={() => setCfgNode(null)}
             onSave={(patch) =>
               patchFlow((f) => ({

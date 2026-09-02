@@ -24,12 +24,17 @@ export interface Suggestion {
   name: string;
   /** valor do ambiente (preview) ou rótulo do tipo */
   hint: string;
-  kind: "env" | "global" | "dinamica";
+  kind: "env" | "global" | "dinamica" | "node";
 }
 
-export function varSuggestions(prefix: string, env: Environment | null): Suggestion[] {
+export function varSuggestions(
+  prefix: string,
+  env: Environment | null,
+  extra: Suggestion[] = [],
+): Suggestion[] {
   const q = prefix.toLowerCase();
   const all: Suggestion[] = [
+    ...extra,
     ...(env?.vars ?? []).map(
       ([name, value]): Suggestion => ({
         name,
@@ -44,7 +49,7 @@ export function varSuggestions(prefix: string, env: Environment | null): Suggest
   const contains = all.filter(
     (s) => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q),
   );
-  return [...starts, ...contains].slice(0, 8);
+  return [...starts, ...contains].slice(0, 10);
 }
 
 /** texto com a sugestão aplicada + posição final do caret */

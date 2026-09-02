@@ -702,6 +702,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .var-sug-hint.global { color: var(--info); }
 .var-sug-hint.dinamica { color: var(--purple); }
+.var-sug-hint.node { color: var(--ok); }
 .v-ok { color: var(--accent); }
 .v-miss { color: var(--err); }
 
