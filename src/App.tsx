@@ -82,6 +82,7 @@ export default function App() {
   const [restoredFrom, setRestoredFrom] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<string | null>(null);
   const [flowsColl, setFlowsColl] = useState<string | null>(null);
+  const [flowInitId, setFlowInitId] = useState<string | null>(null);
   const [checks, setChecks] = useState<CheckResult[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -1058,9 +1059,10 @@ export default function App() {
           setDeleteReqAsk({ collection, folder, request: req })
         }
         onConfig={(collection, folder) => setConfigTarget({ collection, folder })}
-        onOpenFlows={(collection) => {
+        onOpenFlows={(collection, flowId) => {
           setDashboard(null);
           ensureSpec(collection);
+          setFlowInitId(flowId ?? null);
           setFlowsColl(collection);
         }}
         onOpenDashboard={(collection) => {
@@ -1151,22 +1153,12 @@ export default function App() {
 
         {flowsColl && ws.collections.some((c) => c.name === flowsColl) ? (
           <div className="main-col">
-            <div className="view-tabs">
-              <button
-                className="view-tab"
-                disabled={!active}
-                title={active ? "voltar para a request aberta" : "nenhuma request aberta"}
-                onClick={() => setFlowsColl(null)}
-              >
-                ⚡ request
-              </button>
-              <button className="view-tab active">⛓ fluxos · {flowsColl}</button>
-            </div>
             <FlowView
-              key={flowsColl}
+              key={flowsColl + ":" + (flowInitId ?? "")}
               collection={ws.collections.find((c) => c.name === flowsColl)!}
               spec={specs[flowsColl] ?? null}
               envName={envName}
+              initialFlowId={flowInitId}
               onOpenRequest={(_folder, requestId) => {
                 const coll = ws.collections.find((c) => c.name === flowsColl)!;
                 const hit = flattenRequests(coll).find(({ req }) => req.id === requestId);
@@ -1189,20 +1181,6 @@ export default function App() {
           />
         ) : active ? (
           <div className="main-col">
-            <div className="view-tabs">
-              <button className="view-tab active">⚡ request</button>
-              <button
-                className="view-tab"
-                title={"fluxos de " + active.collection}
-                onClick={() => {
-                  ensureSpec(active.collection);
-                  setDashboard(null);
-                  setFlowsColl(active.collection);
-                }}
-              >
-                ⛓ fluxos
-              </button>
-            </div>
           <div className="split">
             <RequestEditor
               crumb={active.collection + (active.folder ? " / " + active.folder : "")}

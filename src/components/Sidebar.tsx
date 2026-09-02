@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Collection, Folder, RequestDef } from "../types";
 import { METHOD_CLASS } from "../types";
+import { api } from "../api";
+import type { Flow } from "../lib/flow";
 import { Dropdown } from "./Dropdown";
 import { Lockup } from "./Logo";
 
@@ -26,7 +28,7 @@ interface Props {
   onRenameCollection: (name: string, newName: string) => void;
   onConfig: (collection: string, folder: string | null) => void;
   onOpenDashboard: (collection: string) => void;
-  onOpenFlows: (collection: string) => void;
+  onOpenFlows: (collection: string, flowId?: string) => void;
   onMoveRequest: (
     from: { collection: string; folder: string | null; name: string; id: string },
     to: { collection: string; folder: string | null },
@@ -316,11 +318,44 @@ export function Sidebar(props: Props) {
     );
   };
 
+  const [mode, setMode] = useState<"requests" | "fluxos">("requests");
+  const [flowsMap, setFlowsMap] = useState<Record<string, Flow[]>>({});
+
+  // aba fluxos: carrega os fluxos de cada collection
+  useEffect(() => {
+    if (mode !== "fluxos") return;
+    let alive = true;
+    Promise.all(
+      props.collections.map(async (c) => {
+        const raw = await api.loadFlows(c.name).catch(() => []);
+        return [c.name, Array.isArray(raw) ? (raw as Flow[]) : []] as const;
+      }),
+    ).then((pairs) => alive && setFlowsMap(Object.fromEntries(pairs)));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, props.collections]);
+
   return (
     <aside className="sidebar">
       <div className="sb-head">
         <Lockup boltSize={22} fontSize={19} />
         <span className="sb-tag">contract client</span>
+      </div>
+      <div className="sb-tabs">
+        <button
+          className={"sb-tab" + (mode === "requests" ? " active" : "")}
+          onClick={() => setMode("requests")}
+        >
+          ⚡ requests
+        </button>
+        <button
+          className={"sb-tab" + (mode === "fluxos" ? " active" : "")}
+          onClick={() => setMode("fluxos")}
+        >
+          ⛓ fluxos
+        </button>
       </div>
       <div className="sb-new">
         <input
@@ -333,7 +368,58 @@ export function Sidebar(props: Props) {
         <button onClick={props.onNewCollection} title="criar collection">+</button>
       </div>
 
-      <div className="sb-tree">
+      {mode === "fluxos" && (
+        <div className="sb-tree">
+          {props.collections.length === 0 && (
+            <p className="sb-empty">Nenhuma collection ainda.</p>
+          )}
+          {props.collections.map((coll) => {
+            const flows = (flowsMap[coll.name] ?? []).filter(
+              (f) => !term || f.name.toLowerCase().includes(term),
+            );
+            if (term && flows.length === 0 && !coll.name.toLowerCase().includes(term)) return null;
+            return (
+              <div key={coll.name} style={{ marginBottom: 6 }}>
+                <div className="coll-row">
+                  <span className="coll-name" onClick={() => props.onOpenFlows(coll.name)}>
+                    {coll.name}
+                  </span>
+                  <span className="coll-actions">
+                    <button
+                      className="btn-icon"
+                      title="novo fluxo / abrir canvas"
+                      onClick={() => props.onOpenFlows(coll.name)}
+                    >
+                      +
+                    </button>
+                  </span>
+                </div>
+                <div style={{ paddingLeft: 14 }}>
+                  {flows.map((f) => (
+                    <div
+                      key={f.id}
+                      className="req-row flow-row"
+                      onClick={() => props.onOpenFlows(coll.name, f.id)}
+                    >
+                      <span className="c-accent" style={{ flexShrink: 0 }}>⛓</span>
+                      <span className="req-name">{f.name}</span>
+                      <span className="c-faint" style={{ fontSize: 10.5 }}>
+                        {f.nodes.filter((n) => n.kind !== "start").length} nós
+                      </span>
+                    </div>
+                  ))}
+                  {flows.length === 0 && (
+                    <div className="sb-empty" style={{ padding: "4px 10px" }}>
+                      sem fluxos — clique em + para criar no canvas
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="sb-tree" style={{ display: mode === "requests" ? undefined : "none" }}>
         {props.collections.length === 0 && (
           <p className="sb-empty">
             Nenhuma collection ainda. Cada request vira um arquivo JSON versionável em{" "}

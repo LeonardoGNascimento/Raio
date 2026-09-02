@@ -16,6 +16,8 @@ interface Props {
   spec: Record<string, unknown> | null;
   envName: string;
   onOpenRequest: (folder: string | null, requestId: string) => void;
+  /** abre já neste fluxo (vindo da sidebar) */
+  initialFlowId?: string | null;
 }
 
 interface DragNode {
@@ -50,7 +52,7 @@ function edgePath(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2 - 8} ${y2}`;
 }
 
-export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
+export function FlowView({ collection, spec, envName, onOpenRequest, initialFlowId }: Props) {
   const [flows, setFlows] = useState<Flow[]>([]);
   const [flowId, setFlowId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -90,7 +92,11 @@ export function FlowView({ collection, spec, envName, onOpenRequest }: Props) {
       .then((raw) => {
         const list = Array.isArray(raw) ? (raw as Flow[]) : [];
         setFlows(list);
-        setFlowId(list[0]?.id ?? null);
+        setFlowId(
+          (initialFlowId && list.some((f) => f.id === initialFlowId) ? initialFlowId : null) ??
+            list[0]?.id ??
+            null,
+        );
       })
       .catch(() => setFlows([]));
     setResults({});
