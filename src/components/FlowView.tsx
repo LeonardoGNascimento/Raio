@@ -610,7 +610,14 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
               </button>
             );
             return (
-              <div className="flow-ctx dd-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+              <div
+                className="flow-ctx dd-menu"
+                style={{ left: ctxMenu.x, top: ctxMenu.y }}
+                // sem isso o mousedown borbulha para o canvas, que fecha o menu antes do click
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.preventDefault()}
+              >
                 {node && node.kind === "request" && (
                   <>
                     {item("✎ abrir request", () => {
