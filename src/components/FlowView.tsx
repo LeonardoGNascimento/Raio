@@ -86,6 +86,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
       name: h.name,
       hint: h.hint,
       kind: "node" as const,
+      container: h.container,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow?.saved, flow?.nodes, collection]);

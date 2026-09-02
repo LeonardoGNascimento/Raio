@@ -32,10 +32,10 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
   const [pop, setPop] = useState<{ name: string; left: number; top: number } | null>(null);
   const [sug, setSug] = useState<{ open: OpenVar; items: Suggestion[]; sel: number; left: number; top: number } | null>(null);
 
-  const refreshSug = (ta: HTMLTextAreaElement) => {
+  const refreshSug = (ta: HTMLTextAreaElement, typing = false) => {
     if (env === undefined) return; // sem env: campo não usa variáveis
     const caret = ta.selectionStart ?? ta.value.length;
-    const open = caret === (ta.selectionEnd ?? caret) ? openVarAt(ta.value, caret) : null;
+    const open = caret === (ta.selectionEnd ?? caret) ? openVarAt(ta.value, caret, typing) : null;
     const items = open ? varSuggestions(open.prefix, env ?? null, extraSuggestions ?? []) : [];
     if (!open || items.length === 0) {
       setSug(null);
@@ -66,17 +66,18 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
     }));
   };
 
-  const pickSug = (name: string) => {
+  const pickSug = (name: string, container = false) => {
     if (!sug) return;
     const ta = taRef.current;
     const caret = ta?.selectionStart ?? value.length;
-    const applied = applySuggestion(value, sug.open, caret, name);
+    const applied = applySuggestion(value, sug.open, caret, name, container);
     onChange(applied.text);
     setSug(null);
     requestAnimationFrame(() => {
       if (ta) {
         ta.setSelectionRange(applied.caret, applied.caret);
         syncScroll(ta);
+        if (container) refreshSug(ta, true);
       }
     });
   };
@@ -91,7 +92,7 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
       }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        pickSug(sug.items[sug.sel].name);
+        pickSug(sug.items[sug.sel].name, sug.items[sug.sel].container);
         return;
       }
       if (e.key === "Escape") {
@@ -168,7 +169,7 @@ export function CodeArea({ value, placeholder, highlight, onChange, onKeyDown, e
         onChange={(e) => {
           onChange(e.target.value);
           syncScroll(e.target);
-          refreshSug(e.target);
+          refreshSug(e.target, true);
         }}
         onKeyDown={onKeyDownAll}
         onKeyUp={(e) => refreshSug(e.currentTarget)}

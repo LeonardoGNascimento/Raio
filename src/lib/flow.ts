@@ -192,6 +192,8 @@ function typeHint(v: unknown): string {
 export interface NodeHint {
   name: string;
   hint: string;
+  /** objeto/array: dá para descer mais um nível */
+  container?: boolean;
 }
 
 /** sugestões {{ref.*}} com tipos reais, a partir dos passos salvos do fluxo */
@@ -213,7 +215,11 @@ export function responseSuggestions(flow: Flow, coll: Collection): NodeHint[] {
       out.push({ name: `${ref}.body`, hint: "texto" });
       continue;
     }
-    out.push({ name: `${ref}.body`, hint: typeHint(parsed) });
+    out.push({
+      name: `${ref}.body`,
+      hint: typeHint(parsed),
+      container: parsed !== null && typeof parsed === "object",
+    });
     let count = 0;
     const walk = (v: unknown, path: string, depth: number) => {
       if (count >= 60 || depth > 4 || v === null || typeof v !== "object") return;
@@ -221,7 +227,11 @@ export function responseSuggestions(flow: Flow, coll: Collection): NodeHint[] {
         out.push({ name: `${path}.length`, hint: `number · ${v.length}` });
         count++;
         if (v.length > 0) {
-          out.push({ name: `${path}.0`, hint: typeHint(v[0]) });
+          out.push({
+            name: `${path}.0`,
+            hint: typeHint(v[0]),
+            container: v[0] !== null && typeof v[0] === "object",
+          });
           count++;
           walk(v[0], `${path}.0`, depth + 1);
         }
@@ -229,7 +239,11 @@ export function responseSuggestions(flow: Flow, coll: Collection): NodeHint[] {
       }
       for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
         if (count >= 60) return;
-        out.push({ name: `${path}.${k}`, hint: typeHint(val) });
+        out.push({
+          name: `${path}.${k}`,
+          hint: typeHint(val),
+          container: val !== null && typeof val === "object",
+        });
         count++;
         walk(val, `${path}.${k}`, depth + 1);
       }

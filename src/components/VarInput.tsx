@@ -150,9 +150,9 @@ export function VarInput({ value, env, onChange, onSaveVar, extraSuggestions, cl
   const [pop, setPop] = useState<{ name: string; left: number } | null>(null);
   const [sug, setSug] = useState<{ open: OpenVar; items: Suggestion[]; sel: number; left: number } | null>(null);
 
-  const refreshSug = (el: HTMLInputElement) => {
+  const refreshSug = (el: HTMLInputElement, typing = false) => {
     const caret = el.selectionStart ?? el.value.length;
-    const open = caret === (el.selectionEnd ?? caret) ? openVarAt(el.value, caret) : null;
+    const open = caret === (el.selectionEnd ?? caret) ? openVarAt(el.value, caret, typing) : null;
     const items = open ? varSuggestions(open.prefix, env, extraSuggestions ?? []) : [];
     if (!open || items.length === 0) {
       setSug(null);
@@ -172,17 +172,19 @@ export function VarInput({ value, env, onChange, onSaveVar, extraSuggestions, cl
     }));
   };
 
-  const pickSug = (name: string) => {
+  const pickSug = (name: string, container = false) => {
     if (!sug) return;
     const el = inputRef.current;
     const caret = el?.selectionStart ?? value.length;
-    const applied = applySuggestion(value, sug.open, caret, name);
+    const applied = applySuggestion(value, sug.open, caret, name, container);
     onChange(applied.text);
     setSug(null);
     requestAnimationFrame(() => {
       if (el) {
         el.setSelectionRange(applied.caret, applied.caret);
         sync(el);
+        // container: segue sugerindo os filhos do path
+        if (container) refreshSug(el, true);
       }
     });
   };
@@ -198,7 +200,7 @@ export function VarInput({ value, env, onChange, onSaveVar, extraSuggestions, cl
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
         e.stopPropagation();
-        pickSug(sug.items[sug.sel].name);
+        pickSug(sug.items[sug.sel].name, sug.items[sug.sel].container);
         return;
       }
       if (e.key === "Escape") {
@@ -261,7 +263,7 @@ export function VarInput({ value, env, onChange, onSaveVar, extraSuggestions, cl
         onChange={(e) => {
           onChange(e.target.value);
           sync(e.target);
-          refreshSug(e.target);
+          refreshSug(e.target, true);
         }}
         onScroll={(e) => sync(e.currentTarget)}
         onKeyUp={(e) => {
