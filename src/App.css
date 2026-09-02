@@ -2088,6 +2088,9 @@ mark.find.cur {
 }
 .flow-gear:hover { color: var(--accent); }
 .flow-badge.flow-saved { color: var(--dim); border-style: dashed; }
+.flow-ctx { position: absolute; z-index: 80; min-width: 190px; }
+.dd-item.ctx-danger { color: var(--err); }
+.dd-item.ctx-danger:hover { background: rgba(var(--rgb-err), 0.1); }
 .flow-resp-body {
   max-height: 55vh;
   overflow: auto;

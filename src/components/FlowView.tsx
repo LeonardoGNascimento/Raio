@@ -70,6 +70,12 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
   const [vars, setVars] = useState<Record<string, string>>({});
   const [log, setLog] = useState<FlowLogEntry[]>([]);
   const [cfgNode, setCfgNode] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    nodeId?: string;
+    edgeId?: string;
+  } | null>(null);
   const [respNode, setRespNode] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
@@ -292,6 +298,15 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
     setConnecting(null);
   };
 
+  const openCtx = (e: React.MouseEvent, target: { nodeId?: string; edgeId?: string }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = canvasRef.current!.getBoundingClientRect();
+    setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, ...target });
+    setSelNode(target.nodeId ?? null);
+    setSelEdge(target.edgeId ?? null);
+  };
+
   const finishConnect = (toId: string) => {
     if (!connecting || connecting.from === toId) return;
     const exists = flow?.edges.some(
@@ -313,6 +328,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      setCtxMenu(null);
       if (selEdge) removeEdge(selEdge);
       else if (selNode && flow?.nodes.find((n) => n.id === selNode)?.kind !== "start")
         removeNode(selNode);
@@ -520,12 +536,14 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseUp}
           onMouseDown={(e) => {
+            setCtxMenu(null);
             if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "svg") {
               setPanning({ x: e.clientX - pan.x, y: e.clientY - pan.y });
               setSelEdge(null);
               setSelNode(null);
             }
           }}
+          onContextMenu={(e) => e.preventDefault()}
         >
           <svg className="flow-svg" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             {flow.edges.map((e) => {
@@ -545,6 +563,7 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                     d={edgePath(a.x, a.y, b.x, b.y)}
                     className="flow-edge-hit"
                     onClick={onEdgeClick}
+                    onContextMenu={(ev) => openCtx(ev, { edgeId: e.id })}
                   />
                   <path
                     d={edgePath(a.x, a.y, b.x, b.y)}
@@ -576,6 +595,55 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
             })()}
           </svg>
 
+          {ctxMenu && (() => {
+            const node = ctxMenu.nodeId ? flow.nodes.find((n) => n.id === ctxMenu.nodeId) : null;
+            const edge = ctxMenu.edgeId ? flow.edges.find((e) => e.id === ctxMenu.edgeId) : null;
+            const item = (label: React.ReactNode, fn: () => void, danger = false) => (
+              <button
+                className={"dd-item" + (danger ? " ctx-danger" : "")}
+                onClick={() => {
+                  setCtxMenu(null);
+                  fn();
+                }}
+              >
+                {label}
+              </button>
+            );
+            return (
+              <div className="flow-ctx dd-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+                {node && node.kind === "request" && (
+                  <>
+                    {item("✎ abrir request", () => {
+                      const t = node.requestId ? reqById.get(node.requestId) : undefined;
+                      if (t) onOpenRequest(t.folder, t.req.id);
+                    })}
+                    {(typeof results[node.id] === "object" || flow.saved?.[node.id]?.body !== undefined) &&
+                      item("👁 ver response", () => setRespNode(node.id))}
+                    {item("▶ rodar daqui", () => runFromNode(node.id))}
+                  </>
+                )}
+                {node && node.kind !== "request" && item("✎ editar", () => setCfgNode(node.id))}
+                {node && item("🗑 excluir nó", () => removeNode(node.id), true)}
+                {edge && (
+                  <>
+                    {(["success", "fail", "always"] as EdgeCond[]).map((c) =>
+                      item(
+                        <span style={{ color: COND_COLOR[c] }}>
+                          {edge.cond === c ? "● " : "○ "}condição: {COND_LABEL[c]}
+                        </span>,
+                        () =>
+                          patchFlow((f) => ({
+                            ...f,
+                            edges: f.edges.map((x) => (x.id === edge.id ? { ...x, cond: c } : x)),
+                          })),
+                      ),
+                    )}
+                    {item("🗑 excluir aresta", () => removeEdge(edge.id), true)}
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <div className="flow-nodes" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             {flow.nodes.map((n) => {
               const target = n.requestId ? reqById.get(n.requestId) : undefined;
@@ -588,10 +656,13 @@ export function FlowView({ collection, spec, envName, onOpenRequest, initialFlow
                     "flow-node " + n.kind + nodeCls(n) + (selNode === n.id ? " sel" : "")
                   }
                   style={{ left: n.x, top: n.y, width: NODE_W, height: NODE_H }}
+                  onContextMenu={(e) => n.kind !== "start" && openCtx(e, { nodeId: n.id })}
                   onMouseDown={(e) => {
+                    if (e.button === 2) return; // botão direito: só menu
                     e.stopPropagation();
                     setSelNode(n.id);
                     setSelEdge(null);
+                    setCtxMenu(null);
                     const p = canvasPos(e);
                     setDragNode({ id: n.id, dx: p.x - n.x, dy: p.y - n.y, moved: false });
                   }}
